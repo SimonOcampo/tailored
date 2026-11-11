@@ -22,7 +22,7 @@ CONTACT = {
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("TAILORED_FAKE", "1")
     monkeypatch.setenv("TAILORED_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     settings = Settings()
     engine = get_engine(tmp_path / "test.db")
     app = create_app(settings=settings, engine=engine)

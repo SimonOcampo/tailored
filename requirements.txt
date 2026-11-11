@@ -6,6 +6,7 @@ fastapi==0.141.1
 uvicorn[standard]==0.52.4
 sqlmodel==0.0.39
 pydantic==2.13.4
+# Wire SDK for DeepSeek's Messages compatibility endpoint. No Anthropic account/key is used.
 anthropic==0.125.0
 httpx==0.28.1
 trafilatura==2.2.0

@@ -27,6 +27,13 @@ from backend.app.services.render import (
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "backend" / "app" / "fixtures"
 
 
+def test_resume_page_count_is_unknown_without_a_readable_pdf(tmp_path):
+    assert render_mod.resume_page_count(None) is None
+    assert render_mod.resume_page_count(tmp_path) is None
+    (tmp_path / "resume.pdf").write_bytes(b"not a PDF")
+    assert render_mod.resume_page_count(tmp_path) is None
+
+
 def _fixture_resume() -> ResumeDoc:
     data = json.loads((FIXTURES_DIR / "tailor.json").read_text(encoding="utf-8"))
     return TailorResult.model_validate(data).resume
@@ -95,10 +102,51 @@ def test_render_resume_html_slate_contains_content():
     assert resume.contact.name in html
     assert resume.headline in html
     for section in resume.sections:
-        assert section.title in html
+        assert ("Work History" if section.type == "experience" else section.title) in html
         if section.type == "experience":
             for item in section.items:
                 assert item.company in html
+
+
+@pytest.mark.pdf
+def test_resume_guide_computed_formatting_across_templates():
+    """Check the CSS cascade in Chromium, including legacy hardcoded styles."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            for template in render_mod.TEMPLATES:
+                page.set_content(render_resume_html(_fixture_resume(), template))
+                actual = page.evaluate("""() => {
+                  const selectors = ['body', '.name', '.contact-line', '.section-title',
+                    '.primary', '.secondary', '.meta', '.skill-items', '.bullets'];
+                  return Object.fromEntries(selectors.map(selector => {
+                    const style = getComputedStyle(document.querySelector(selector));
+                    return [selector, {font: style.fontFamily, size: parseFloat(style.fontSize),
+                      weight: style.fontWeight, color: style.color,
+                      leading: parseFloat(style.lineHeight) / parseFloat(style.fontSize)}];
+                  }));
+                }""")
+                for selector, style in actual.items():
+                    assert style["font"] == "Arial, sans-serif", (template, selector)
+                    assert style["color"] == "rgb(0, 0, 0)", (template, selector)
+                    leading = 1.15 if selector == ".name" else 4 / 3 if selector == ".contact-line" else 1.5
+                    assert style["leading"] == pytest.approx(leading, abs=0.001)
+                    pt = 14 if selector == ".name" else 12 if selector == ".contact-line" else 10.5
+                    assert style["size"] == pytest.approx(pt * 4 / 3, abs=0.001)
+                    weight = "700" if selector in (".name", ".section-title") else "400"
+                    assert style["weight"] == weight, (template, selector)
+        finally:
+            browser.close()
+
+
+def test_resume_guide_formatting_does_not_change_cover_letters():
+    assert "Resume guide 2.0 formatting" in render_resume_html(_small_resume(), "slate")
+    assert "Resume guide 2.0 formatting" not in render_cover_letter_html(
+        "Hello", _small_resume().contact, "slate"
+    )
 
 
 def test_render_resume_html_escapes_html():
@@ -132,7 +180,7 @@ def test_render_cover_letter_html_escapes_raw_html():
     assert "<strong>Sincerely</strong>" in html_out
 
 
-def test_export_application_writes_five_files(tmp_path, monkeypatch):
+def test_export_application_writes_six_files(tmp_path, monkeypatch):
     calls = []
 
     def fake_render_pdf(html, out_path, page_size="Letter"):
@@ -152,6 +200,7 @@ def test_export_application_writes_five_files(tmp_path, monkeypatch):
     assert export_dir == tmp_path / "exports" / "42"
     for name in (
         "resume.pdf",
+        "resume.docx",
         "resume.html",
         "resume.txt",
         "cover_letter.pdf",

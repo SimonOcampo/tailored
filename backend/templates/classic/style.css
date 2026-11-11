@@ -1,0 +1,107 @@
+/*
+   Classic — compact, one-column serif identity based on the supplied TeX
+   resume. The reference credits Jake Gutierrez / sb2nov and the MIT License.
+*/
+
+:root {
+  --fs-name: 20pt;
+  --fs-headline: 9.5pt;
+  --fs-section: 10.5pt;
+  --fs-body: 9.5pt;
+  --fs-meta: 8.5pt;
+  --leading: 1.25;
+  --measure: 100%;
+  --rule-weight: 0.6pt;
+  --rule-color: #111111;
+  --space-1: 0.12rem;
+  --space-2: 0.3rem;
+  --space-3: 0.5rem;
+  --space-4: 0.65rem;
+}
+
+body {
+  font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+}
+
+.resume-header {
+  text-align: center;
+  margin-bottom: var(--space-3);
+}
+
+.name {
+  font-weight: 600;
+}
+
+.headline {
+  margin-top: 0.08rem;
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+.contact-line {
+  margin-top: 0.12rem;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.headline:empty,
+.summary:empty {
+  display: none;
+}
+
+.summary {
+  margin-top: var(--space-2);
+  margin-inline: auto;
+  text-align: left;
+}
+
+.section {
+  margin-bottom: var(--space-3);
+}
+
+.section-title {
+  font-variant: small-caps;
+  font-weight: 600;
+  letter-spacing: 0.035em;
+  color: var(--ink);
+  padding-bottom: 0.08rem;
+  border-bottom: var(--rule-weight) solid var(--rule-color);
+  margin-bottom: var(--space-2);
+}
+
+.item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-2);
+}
+
+.item-head .primary {
+  font-weight: 600;
+}
+
+.item-head .secondary {
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+.item-head .meta {
+  margin-left: auto;
+  color: var(--ink);
+}
+
+.bullets {
+  margin-left: 1em;
+}
+
+.bullets li {
+  margin-bottom: 0.02rem;
+}
+
+.skill-group {
+  margin-bottom: 0.08rem;
+}
+
+.skill-label {
+  font-weight: 600;
+}

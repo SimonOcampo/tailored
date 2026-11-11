@@ -1,0 +1,12 @@
+{
+  "name": "classic",
+  "label": "Classic",
+  "description": "Compact serif layout with a centered header, ruled headings, and education-first section order.",
+  "best_for": "Students and early-career engineering roles",
+  "structure": "education-first",
+  "order": 9,
+  "fonts": [
+    {"family": "Source Serif 4", "file": "SourceSerif4-italic.woff2", "weight": "400", "style": "italic"},
+    {"family": "Source Serif 4", "file": "SourceSerif4-normal.woff2", "weight": "400 600", "style": "normal"}
+  ]
+}

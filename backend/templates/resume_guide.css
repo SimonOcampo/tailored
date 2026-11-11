@@ -1,0 +1,56 @@
+/* Resume guide 2.0 formatting, refined by Headless Resume Template.docx.
+   Source measurements and slot rules: docs/headless-resume-template.md. */
+@page { margin: 0.5in 1in 0.94375in; }
+:root {
+  --fs-name: 14pt;
+  --fs-headline: 10.5pt;
+  --fs-section: 10.5pt;
+  --fs-body: 10.5pt;
+  --fs-meta: 10.5pt;
+  --leading: 1.5;
+  --item-break: auto;
+  --measure: 100%;
+  --ink: #000;
+  --ink-soft: #000;
+  --ink-faint: #000;
+  --rule-color: #000;
+  --space-1: 0pt;
+  --space-2: 4pt;
+  --space-3: 15.75pt;
+  --space-4: 15.75pt;
+}
+body { font: 10.5pt/1.5 Arial, sans-serif; color: #000; background: #fff; }
+.resume-header { text-align: center; margin-top: 18pt; margin-bottom: 10.5pt; }
+.name { font-size: 14pt; font-weight: 700; line-height: 1.15; margin-bottom: 7.5pt; }
+.contact-line, .authorization-line { font-size: 9.5pt; line-height: 1.15; }
+.contact-line { white-space: nowrap; }
+.authorization-line { font-size: 9pt; margin-bottom: 2pt; }
+.project-link { font-size: 9pt; font-style: normal; }
+.section-projects .item-head { justify-content: space-between; }
+.education-identity { flex: 1 1 auto; }
+.headline:empty, .summary:empty { display: none; }
+.headline, .summary { font-size: 10.5pt; font-weight: 400; }
+.summary { text-align: left; margin-top: 15.75pt; }
+.section-title { font-size: 10.5pt; font-weight: 700; margin-bottom: 4pt; }
+.item { margin-bottom: 15.75pt; }
+.item-head { display: flex; flex-wrap: wrap; gap: 0 0.25em; align-items: baseline; margin-bottom: 4pt; }
+.item-head { break-after: avoid; }
+.primary, .secondary, .meta, .skill-label { font-weight: 400; font-size: 10.5pt; }
+.item-head .meta { margin-left: auto; }
+.section-experience .item-head, .section-projects .item-head { font-style: italic; }
+.job-identity { flex: 1 1 auto; }
+.bullets { margin-left: 0.5in; list-style: disc outside; }
+.bullets { break-before: avoid; }
+.bullets li { padding-left: 0; margin-bottom: 0; break-inside: avoid; }
+.bullets li::marker { font-size: 1em; }
+.section-education .item, .section-certifications .item {
+  display: list-item; list-style: disc outside; margin-left: 0.5in; margin-bottom: 0;
+}
+.section-education .item-head, .section-certifications .item-head { margin-bottom: 0; }
+.section-education .item { break-inside: avoid; }
+.section-education:has(+ .continued-education) { margin-bottom: 0; }
+.continued-education .section-title { display: none; }
+.section-education, .section-certifications { margin-bottom: 15.75pt; }
+.section-education:has(+ .continued-education) .item:last-child { margin-bottom: 0; }
+.skill-group { margin-bottom: 0; break-inside: avoid; }
+a { color: inherit; text-decoration: none; }

@@ -73,10 +73,10 @@ def exports(monkeypatch) -> list[tuple[int, str]]:
 
 
 @pytest.fixture()
-def people(engine, claude_fake) -> dict[str, int]:
+def people(engine, deepseek_fake) -> dict[str, int]:
     """Ada (A4) and Bea (Letter), both with the intake fixture's master profile,
     which the tailor fixture's resume passes the truthfulness guard against."""
-    intake, _usage = claude_fake.structured(
+    intake, _usage = deepseek_fake.structured(
         task="intake", system="seed", user_content="seed", schema_model=IntakeResult
     )
     ids: dict[str, int] = {}
@@ -170,7 +170,7 @@ def test_batch_create_for_a_person_without_own_values_uses_the_app_wide_ones(
 
 
 def test_pipeline_render_uses_the_owners_page_size(
-    engine, claude_fake, fake_settings, people, exports, monkeypatch
+    engine, deepseek_fake, fake_settings, people, exports, monkeypatch
 ):
     monkeypatch.setattr(pipeline, "get_settings", lambda: fake_settings)
     app_ids = {}
@@ -187,7 +187,7 @@ def test_pipeline_render_uses_the_owners_page_size(
             session.commit()
             session.refresh(app_row)
             app_ids[name] = app_row.id
-        pipeline.process_application(app_ids[name], engine=engine, claude=claude_fake)
+        pipeline.process_application(app_ids[name], engine=engine, deepseek=deepseek_fake)
         with Session(engine) as session:
             app_row = session.get(Application, app_ids[name])
             assert app_row.status == "ready", app_row.error_message

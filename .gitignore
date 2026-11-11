@@ -1,5 +1,6 @@
 # runtime state (sqlite db, exports, settings.json)
 data/
+tmp/
 
 # python
 __pycache__/

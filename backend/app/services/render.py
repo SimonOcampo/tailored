@@ -10,6 +10,7 @@ import base64
 import functools
 import html
 import json
+from io import BytesIO
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,11 +18,12 @@ import markdown as markdown_lib
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from ..schemas import Contact, ResumeDoc
+from .resume_guidance import format_resume_date, contact_links, display_url, safe_web_url
 
 TEMPLATES_DIR = Path(__file__).resolve().parents[2] / "templates"
 FONTS_DIR = TEMPLATES_DIR / "fonts"
 
-STRUCTURES = ("experience-first", "projects-forward")
+STRUCTURES = ("experience-first", "projects-forward", "education-first")
 _REQUIRED_KEYS = frozenset(
     {"name", "label", "description", "best_for", "structure", "order", "fonts"}
 )
@@ -144,6 +146,9 @@ _env = Environment(
 )
 
 
+_env.filters["resume_date"] = format_resume_date
+
+
 @functools.lru_cache(maxsize=None)
 def _font_css(template: str) -> str:
     """@font-face declarations with base64-inlined woff2 for one template.
@@ -202,19 +207,32 @@ def render_resume_html(
     edit_mode is the on-screen preview only: it adds the data-edit-path /
     data-node-path / data-delete-path vocabulary the frontend harvest reads,
     marks Master Profile facts locked, and appends edit_mode.css. Every export
-    path leaves it off, and tests/test_inline_edit.py holds golden copies of
-    both body partials to prove the exported markup never moves.
+    path leaves it off. The Headless layout keeps the same JSON edit paths;
+    the legacy partials remain available for compatibility checks.
     """
-    base_css, style_css = _load_css(template)
+    base_css, _legacy_style_css = _load_css(template)
+    # The supplied template is authoritative for resumes. Retain bundled font
+    # declarations for standalone compatibility, but not legacy identity rules.
+    style_css = _font_css(template) + "\n\n" + (TEMPLATES_DIR / "resume_guide.css").read_text(encoding="utf-8")
     if edit_mode:
         style_css = f"{style_css}\n\n{_edit_css()}"
-    tpl = _env.get_template(f"{template}/template.html")
+    tpl = _env.get_template("headless_resume.html")
+    order = {kind: index for index, kind in enumerate(
+        ("education", "certifications", "experience", "projects", "skills", "extras")
+    )}
+    section_order = sorted(range(len(resume.sections)), key=lambda i: order[resume.sections[i].type])
     return tpl.render(
         resume=resume,
         base_css=base_css,
         style_css=style_css,
         json_ld=_json_ld_payload(resume),
         edit_mode=edit_mode,
+        section_order=section_order,
+        has_education=any(s.type == "education" and s.items for s in resume.sections),
+        has_certifications=any(s.type == "certifications" and s.items for s in resume.sections),
+        contact_links=contact_links(resume.contact),
+        display_url=display_url,
+        safe_web_url=safe_web_url,
     )
 
 
@@ -247,6 +265,8 @@ def render_ats_text(resume: ResumeDoc) -> str:
     lines: list[str] = []
     c = resume.contact
     lines.append(c.name.upper())
+    if c.authorization_note:
+        lines.append(c.authorization_note)
     contact_bits = [b for b in (c.email, c.phone, c.location) if b]
     if contact_bits:
         lines.append(" | ".join(contact_bits))
@@ -258,8 +278,11 @@ def render_ats_text(resume: ResumeDoc) -> str:
 
     for section in resume.sections:
         lines.append("")
-        lines.append(section.title.upper())
-        lines.append("=" * len(section.title))
+        title = section.title
+        if section.type == "education":
+            title = "Education & Certificates" if any(s.type == "certifications" and s.items for s in resume.sections) else "Education"
+        lines.append(title.upper())
+        lines.append("=" * len(title))
         if section.type == "experience":
             for item in section.items:
                 head = (
@@ -274,8 +297,6 @@ def render_ats_text(resume: ResumeDoc) -> str:
         elif section.type == "projects":
             for item in section.items:
                 head = item.name
-                if item.description:
-                    head += f" — {item.description}"
                 lines.append(head)
                 for bullet in item.bullets:
                     lines.append(f"- {bullet}")
@@ -461,19 +482,99 @@ def render_pdf(html: str, out_path: Path, page_size: str = "Letter") -> None:
         try:
             page = browser.new_page()
             page.set_content(html, wait_until="load")
-            page.pdf(
-                path=str(out_path),
-                format=page_size,
-                print_background=True,
-                margin={
-                    "top": "0.5in",
-                    "right": "0.5in",
-                    "bottom": "0.5in",
-                    "left": "0.5in",
-                },
-            )
+            out_path.write_bytes(_print_pdf(page, page_size))
         finally:
             browser.close()
+
+
+def _print_pdf(page, page_size: str) -> bytes:
+    return page.pdf(format=page_size, print_background=True,
+                    margin={side: "0.5in" for side in ("top", "right", "bottom", "left")})
+
+
+def _page_fit_candidates(resume: ResumeDoc):
+    """Remove optional/lower-priority selections, never rewrite source facts."""
+    for section in list(resume.sections):
+        if section.type in {"skills", "extras"}:
+            resume.sections.remove(section)
+            yield
+    projects = [s for s in resume.sections if s.type == "projects"]
+    work = [s for s in resume.sections if s.type == "experience"]
+    for section in projects:
+        while len(section.items) > 2:
+            section.items.pop()
+            yield
+    for section in projects + work:
+        for item in reversed(section.items):
+            while len(item.bullets) > 2:
+                item.bullets.pop()
+                yield
+    for section in work:
+        while len(section.items) > 2:
+            section.items.pop()  # Oldest role after the chronology pass.
+            yield
+    for section in projects:
+        while len(section.items) > 1:
+            section.items.pop()
+            yield
+    for section in projects + work:
+        for item in reversed(section.items):
+            while len(item.bullets) > 1:
+                item.bullets.pop()
+                yield
+    for section in work:
+        while len(section.items) > 1:
+            section.items.pop()
+            yield
+    for section in projects:
+        if work and section.items:
+            resume.sections.remove(section)
+            yield
+
+
+def prepare_resume(resume: ResumeDoc, template: str, page_size: str = "Letter",
+                   *, one_page: bool = False) -> ResumeDoc:
+    """Return the actual document to save/preview/export, measured before save.
+
+    Optional skills give way to work and projects. Model ordering determines
+    project priority; work keeps its chronology. A hard limit fails explicitly
+    if even minimal evidence cannot fit, rather than clipping text or shrinking
+    body type. The bank and supplied ResumeDoc are never mutated.
+    """
+    if not one_page:
+        return resume
+    from playwright.sync_api import sync_playwright
+    from pypdf import PdfReader
+
+    fitted = resume.model_copy(deep=True)
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            def fits():
+                page.set_content(render_resume_html(fitted, template), wait_until="load")
+                return len(PdfReader(BytesIO(_print_pdf(page, page_size))).pages) == 1
+            if fits():
+                return fitted
+            for _ in _page_fit_candidates(fitted):
+                if fits():
+                    return fitted
+        finally:
+            browser.close()
+    raise ValueError("The resume cannot fit one page at the template's body size. Shorten the longest entries before saving.")
+
+
+def resume_page_count(export_dir: str | Path | None) -> int | None:
+    """Measure the exported resume for agents checking a candidate's page limit."""
+    if not export_dir:
+        return None
+    from pypdf import PdfReader
+    from pypdf.errors import PdfReadError
+
+    try:
+        return len(PdfReader(Path(export_dir) / "resume.pdf").pages)
+    except (OSError, PdfReadError):
+        return None
 
 
 def export_application(
@@ -485,10 +586,10 @@ def export_application(
     data_dir: Path,
     page_size: str = "Letter",
 ) -> Path:
-    """Write the five export files for an application; return the export dir.
+    """Write the six export files for an application; return the export dir.
 
     Files under <data_dir>/exports/<application_id>/:
-      resume.pdf, resume.html, resume.txt (ATS), cover_letter.pdf,
+      resume.pdf, resume.docx, resume.html, resume.txt (ATS), cover_letter.pdf,
       cover_letter.txt (the raw markdown).
     """
     export_dir = Path(data_dir) / "exports" / str(application_id)
@@ -497,6 +598,9 @@ def export_application(
     resume_html = render_resume_html(resume, template)
     cover_html = render_cover_letter_html(cover_md, contact, template)
     ats_text = render_ats_text(resume)
+    from .headless_docx import render_resume_docx
+
+    render_resume_docx(resume, export_dir / "resume.docx")
 
     (export_dir / "resume.html").write_text(resume_html, encoding="utf-8")
     (export_dir / "resume.txt").write_text(ats_text, encoding="utf-8")

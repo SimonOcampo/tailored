@@ -12,7 +12,7 @@ const SETUP = {
   mcp_server_exists: true,
   mcp_command:
     'claude mcp add tailored -- "C:\\proj\\.venv\\Scripts\\python.exe" "C:\\proj\\backend\\mcp_server.py"',
-  env_line: "ANTHROPIC_API_KEY=sk-ant-...",
+  env_line: "DEEPSEEK_API_KEY=sk-...",
   workflow_guide_tool: "get_workflow_guide",
 };
 

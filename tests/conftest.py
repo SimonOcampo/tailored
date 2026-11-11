@@ -55,7 +55,7 @@ def db_session(session):
 def fake_settings(tmp_path):
     """Settings isolated from the environment: tmp data_dir, fake mode on."""
     return Settings(
-        anthropic_api_key=None,
+        deepseek_api_key=None,
         data_dir=tmp_path,
         fake_mode=True,
         host="127.0.0.1",
@@ -77,12 +77,12 @@ from pathlib import Path
 
 import pytest
 
-from backend.app.services.claude import ClaudeService
+from backend.app.services.deepseek import DeepSeekService
 
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "backend" / "app" / "fixtures"
 
 
 @pytest.fixture
-def claude_fake() -> ClaudeService:
-    """Fixture-backed ClaudeService; never touches the network."""
-    return ClaudeService(fake_mode=True, fixtures_dir=FIXTURES_DIR)
+def deepseek_fake() -> DeepSeekService:
+    """Fixture-backed DeepSeekService; never touches the network."""
+    return DeepSeekService(fake_mode=True, fixtures_dir=FIXTURES_DIR)

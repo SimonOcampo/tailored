@@ -49,9 +49,9 @@ def _fixture(name: str) -> dict:
 
 
 @pytest.fixture()
-def profile_id(engine, claude_fake) -> int:
+def profile_id(engine, deepseek_fake) -> int:
     """Seed one profile from the intake fixture."""
-    intake, _usage = claude_fake.structured(
+    intake, _usage = deepseek_fake.structured(
         task="intake", system="seed", user_content="seed", schema_model=IntakeResult
     )
     with Session(engine) as session:
@@ -104,6 +104,8 @@ def test_workflow_guide_contents():
     # the structures now come from the on-disk manifests.
     assert "section order" in guide
     assert "get_master_profile" in guide
+    assert "save_outreach" in guide
+    assert "Dale Carnegie" in guide
 
     # The fetch ladder. This guide IS the deliverable for the browser half of
     # the design, and it silently rotting is the realistic failure mode.
@@ -191,6 +193,31 @@ def test_list_templates_matches_gallery_metadata():
 
 # --- create_application ---
 
+
+def test_mcp_can_store_no_contacts_without_an_api_key(engine, profile_id, tmp_path, pdf_faked):
+    app_id = _create_app(engine, profile_id)
+    mcp_ops.save_parsed_posting(engine, app_id, _fixture("parse_posting"))
+    _save_tailor(engine, tmp_path, app_id, _fixture("tailor"))
+    result = mcp_ops.save_outreach(engine, app_id, {
+        "status": "no_contacts", "contacts": [], "notes": "Public pages were unavailable."
+    })
+    assert result["checked_at"]
+    assert mcp_ops.get_application(engine, app_id)["outreach"]["status"] == "no_contacts"
+
+
+def test_mcp_rejects_unsubstantiated_outreach_without_changing_the_resume(engine, profile_id, tmp_path, pdf_faked):
+    from test_outreach import lead, draft
+    app_id = _create_app(engine, profile_id)
+    mcp_ops.save_parsed_posting(engine, app_id, _fixture("parse_posting"))
+    _save_tailor(engine, tmp_path, app_id, _fixture("tailor"))
+    with pytest.raises(mcp_ops.McpOpsError, match="public evidence"):
+        mcp_ops.save_outreach(engine, app_id, {"status": "ready", "contacts": [
+            {**lead().model_dump(), **draft().model_dump(exclude={"contact_index"})}
+        ]})
+    detail = mcp_ops.get_application(engine, app_id)
+    assert detail["status"] == "ready"
+    assert detail["outreach"] is None
+
 def test_create_application_rejects_unknown_template(engine, profile_id):
     with pytest.raises(mcp_ops.McpOpsError) as exc:
         mcp_ops.create_application(
@@ -245,6 +272,27 @@ def test_full_flow_reaches_ready(engine, profile_id, tmp_path, pdf_faked):
     assert detail["status"] == "ready"
     assert detail["company"] == "Northwind Labs"
     assert set(detail["files"]) == set(mcp_ops.EXPORT_FILES)
+
+
+@pytest.mark.parametrize("page_count", [1, 2])
+def test_get_application_reports_rendered_resume_page_count(
+    engine, profile_id, tmp_path, page_count
+):
+    """Agents can distinguish a one-page PDF from an overflowing candidate."""
+    from pypdf import PdfWriter
+
+    app_id = _create_app(engine, profile_id)
+    writer = PdfWriter()
+    for _ in range(page_count):
+        writer.add_blank_page(width=612, height=792)
+    writer.write(tmp_path / "resume.pdf")
+    with Session(engine) as session:
+        app = session.get(Application, app_id)
+        app.export_dir = str(tmp_path)
+        session.add(app)
+        session.commit()
+
+    assert mcp_ops.get_application(engine, app_id)["resume_page_count"] == page_count
 
 
 # --- truthfulness gate ---
@@ -691,12 +739,12 @@ def test_queue_jobs_returns_the_ids_and_urls(engine, profile_id):
 
 def test_queue_jobs_never_calls_claude(engine, profile_id, monkeypatch):
     """Queueing twenty URLs must cost nothing."""
-    from backend.app.services import claude as claude_module
+    from backend.app.services import deepseek as deepseek_module
 
     def explode(*args, **kwargs):
         raise AssertionError("queue_jobs must not call Claude")
 
-    monkeypatch.setattr(claude_module.ClaudeService, "structured", explode)
+    monkeypatch.setattr(deepseek_module.DeepSeekService, "structured", explode)
     assert len(mcp_ops.queue_jobs(engine, profile_id, QUEUE_URLS)) == 3
 
 
@@ -754,7 +802,7 @@ def test_a_duplicate_within_one_queue_call_is_skipped(engine, profile_id):
         assert len(session.exec(select(Application)).all()) == 1
 
 
-def test_dedup_is_scoped_to_the_profile(engine, profile_id, claude_fake):
+def test_dedup_is_scoped_to_the_profile(engine, profile_id, deepseek_fake):
     """Two people may legitimately apply to the same job."""
     with Session(engine) as session:
         other = Profile(name="Someone Else")
@@ -794,7 +842,7 @@ def test_queue_jobs_uses_a_depth_the_pipeline_can_dispatch(engine, profile_id):
 
 
 def test_a_queued_job_generates_to_ready_through_the_web_pipeline(
-    engine, profile_id, client, fake_settings, claude_fake, pdf_faked, monkeypatch
+    engine, profile_id, client, fake_settings, deepseek_fake, pdf_faked, monkeypatch
 ):
     """The full path the dashboard offers for a queued row: the Generate
     button (POST /generate), then the built-in pipeline fetches, parses,
@@ -817,7 +865,7 @@ def test_a_queued_job_generates_to_ready_through_the_web_pipeline(
         "fetch_posting",
         lambda url, timeout=20.0: FetchResult(status="fetched", text=POSTING_TEXT),
     )
-    pipeline.process_application(app_id, engine=engine, claude=claude_fake)
+    pipeline.process_application(app_id, engine=engine, deepseek=deepseek_fake)
 
     with Session(engine) as session:
         app = session.get(Application, app_id)
@@ -1024,7 +1072,7 @@ def test_report_fetch_blocked_is_visible_on_the_application(client, engine, prof
 
 
 def test_report_fetch_blocked_leaves_the_job_pasteable_to_ready(
-    engine, profile_id, client, fake_settings, claude_fake, pdf_faked, monkeypatch
+    engine, profile_id, client, fake_settings, deepseek_fake, pdf_faked, monkeypatch
 ):
     """Blocked is a record, not a deletion: the promise is that the USER can
     still paste the posting text and get a finished resume. Exercise the real
@@ -1041,7 +1089,7 @@ def test_report_fetch_blocked_leaves_the_job_pasteable_to_ready(
 
     # ...and the pasted text must carry the pipeline all the way to ready.
     monkeypatch.setattr(pipeline, "get_settings", lambda: fake_settings)
-    pipeline.resume_after_paste(app_id, POSTING_TEXT, engine=engine, claude=claude_fake)
+    pipeline.resume_after_paste(app_id, POSTING_TEXT, engine=engine, deepseek=deepseek_fake)
 
     with Session(engine) as session:
         app = session.get(Application, app_id)

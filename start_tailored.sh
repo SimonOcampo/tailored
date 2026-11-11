@@ -165,7 +165,7 @@ check_key() {
 import os, sys
 from dotenv import load_dotenv
 load_dotenv()
-key = os.environ.get('ANTHROPIC_API_KEY', '').strip()
+key = os.environ.get('DEEPSEEK_API_KEY', '').strip()
 fake = os.environ.get('TAILORED_FAKE', '')
 sys.exit(0 if (key or fake == '1') else 1)
 "
@@ -192,8 +192,8 @@ if [ "$HAVE_KEY" = "0" ] && [ -t 0 ]; then
     ATTEMPTS=0
     while [ "$HAVE_KEY" = "0" ]; do
         echo ""
-        echo "No Anthropic API key found yet."
-        echo "  [1] Add my Anthropic API key now (opens ${EDITOR:-nano})"
+        echo "No DeepSeek API key found yet."
+        echo "  [1] Add my DeepSeek API key now (opens ${EDITOR:-nano})"
         echo "  [2] Try it in demo mode (no key needed, sample data)"
         echo "  [3] Exit"
         read -r -p "Choose 1, 2, or 3: " CHOICE
@@ -249,7 +249,7 @@ echo ""
     echo ""
     echo "Quick troubleshooting:"
     echo "  - Try running: bash start_tailored.sh --clean"
-    echo "  - Check that .env has a valid ANTHROPIC_API_KEY, or delete .env to use demo mode"
+    echo "  - Check that .env has a valid DEEPSEEK_API_KEY, or delete .env to use demo mode"
     echo "  - Check Python 3.11+ is installed: python3 --version"
     echo "  - Try: PYTHONPATH= bash start_tailored.sh"
     echo ""

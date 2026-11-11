@@ -48,6 +48,7 @@ export type ExportKind =
   | "resume.pdf"
   | "resume.html"
   | "resume.txt"
+  | "resume.docx"
   | "cover_letter.pdf"
   | "cover_letter.txt";
 
@@ -63,6 +64,7 @@ export interface Contact {
   phone?: string | null;
   location?: string | null;
   links: LinkItem[];
+  authorization_note?: string;
 }
 
 // ---- master profile ----
@@ -282,6 +284,30 @@ export interface ApplicationDetail extends ApplicationSummary {
   parsed: ParsedPosting | null;
   raw_text_present: boolean;
   events: ApplicationEvent[];
+  outreach?: OutreachPlan | null;
+}
+
+export interface OutreachContact {
+  name: string;
+  company: string;
+  role: string;
+  relevance: string;
+  source_url: string;
+  evidence_quote: string;
+  email: string | null;
+  email_source_url: string | null;
+  email_evidence_quote?: string | null;
+  linkedin_url: string | null;
+  email_subject: string;
+  email_body: string;
+  linkedin_message: string;
+}
+
+export interface OutreachPlan {
+  status: "ready" | "no_contacts" | "unavailable";
+  notes: string;
+  checked_at: string;
+  contacts: OutreachContact[];
 }
 
 /** One voice-contract hit, addressed to the field it sits in. */
@@ -313,6 +339,7 @@ export interface SettingsShape {
 
 export interface JobRequest {
   url: string;
+  posting_text?: string;
   depth?: Depth;
   template?: TemplateName;
 }

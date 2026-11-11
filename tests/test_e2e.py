@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 from starlette.background import BackgroundTasks
 
 from backend.app.services import pipeline, render
-from backend.app.services.claude import ClaudeService
+from backend.app.services.deepseek import DeepSeekService
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 FIXTURES_DIR = PROJECT_ROOT / "backend" / "app" / "fixtures"
@@ -101,7 +101,7 @@ def _make_app(tmp_path, monkeypatch):
     """
     monkeypatch.setenv("TAILORED_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("TAILORED_FAKE", "1")
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.setattr(
         BackgroundTasks, "add_task", lambda self, func, *args, **kwargs: None
     )
@@ -126,7 +126,7 @@ def _first_experience_company(tailor: dict) -> str:
     raise AssertionError("tailor.json fixture has no experience items")
 
 
-def _run_full_flow(client: TestClient, engine, claude: ClaudeService) -> int:
+def _run_full_flow(client: TestClient, engine, deepseek: DeepSeekService) -> int:
     """Shared flow for both variants. Returns the created application id."""
     intake = _intake_fixture()
     tailor = _tailor_fixture()
@@ -180,7 +180,7 @@ def _run_full_flow(client: TestClient, engine, claude: ClaudeService) -> int:
         respx.get(POSTING_URL).mock(
             return_value=httpx.Response(200, html=POSTING_HTML)
         )
-        pipeline.process_application(app_id, engine=engine, claude=claude)
+        pipeline.process_application(app_id, engine=engine, deepseek=deepseek)
 
     # 6. Final status: ready, version 1, content present.
     r = client.get(f"/api/applications/{app_id}")
@@ -230,7 +230,7 @@ def _run_full_flow(client: TestClient, engine, claude: ClaudeService) -> int:
     )
     assert r.status_code in (200, 201), r.text
     # add_task is dropped, so perform the regeneration explicitly:
-    pipeline.regenerate_application(app_id, feedback, engine=engine, claude=claude)
+    pipeline.regenerate_application(app_id, feedback, engine=engine, deepseek=deepseek)
     r = client.get(f"/api/applications/{app_id}")
     assert r.status_code == 200
     detail = r.json()
@@ -251,18 +251,18 @@ def test_e2e_fake_mode_full_flow(tmp_path, monkeypatch):
     # Patch BEFORE create_app so demo seeding at startup also uses the stub.
     monkeypatch.setattr(render, "render_pdf", fake_render_pdf)
     fastapi_app = _make_app(tmp_path, monkeypatch)
-    claude = ClaudeService(fake_mode=True, fixtures_dir=FIXTURES_DIR)
+    deepseek = DeepSeekService(fake_mode=True, fixtures_dir=FIXTURES_DIR)
     with TestClient(fastapi_app) as client:
-        _run_full_flow(client, fastapi_app.state.engine, claude)
+        _run_full_flow(client, fastapi_app.state.engine, deepseek)
 
 
 @pytest.mark.pdf
 def test_e2e_real_pdf(tmp_path, monkeypatch):
     """PDF variant: same flow with the REAL Playwright renderer; asserts %PDF bytes."""
     fastapi_app = _make_app(tmp_path, monkeypatch)
-    claude = ClaudeService(fake_mode=True, fixtures_dir=FIXTURES_DIR)
+    deepseek = DeepSeekService(fake_mode=True, fixtures_dir=FIXTURES_DIR)
     with TestClient(fastapi_app) as client:
-        app_id = _run_full_flow(client, fastapi_app.state.engine, claude)
+        app_id = _run_full_flow(client, fastapi_app.state.engine, deepseek)
         r = client.get(f"/api/applications/{app_id}/exports/resume.pdf")
         assert r.status_code == 200
         assert r.content.startswith(b"%PDF"), r.content[:16]
@@ -277,7 +277,7 @@ def test_readme_quickstart():
         "playwright install chromium",
         "python run.py",
         "TAILORED_FAKE=1",
-        "ANTHROPIC_API_KEY",
+        "DEEPSEEK_API_KEY",
         'pytest -m "not pdf"',
         "TAILORED_PORT",
     ):

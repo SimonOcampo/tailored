@@ -115,11 +115,11 @@ File permissions issue, usually on Windows.
 
 ---
 
-### Error: "No Anthropic API key found" / "Demo mode"
+### Error: "No DeepSeek API key found" / "Demo mode"
 The app launches but can't call the AI API.
 
 **Fix:**
-1. Get a free API key from [console.anthropic.com](https://console.anthropic.com/)
+1. Get a free API key from [platform.deepseek.com](https://platform.deepseek.com/)
 2. The launcher will ask you to paste it into `.env` (opens in Notepad)
 3. Save and try again
 4. Or choose option [2] to use **demo mode** (no key needed, sample data)
@@ -217,7 +217,7 @@ This wipes everything and starts fresh. Your profiles and saved jobs (in `data/t
 
 You can customize behavior with environment variables before running:
 
-- `ANTHROPIC_API_KEY=sk-ant-...` — Your API key (or set in `.env`)
+- `DEEPSEEK_API_KEY=sk-...` — Your API key (or set in `.env`)
 - `TAILORED_FAKE=1` — Run in demo mode (no API key needed)
 - `TAILORED_DATA_DIR=<path>` — Change where data is stored (default: `./data`)
 - `TAILORED_HOST=<host>` — Change the server host (default: `127.0.0.1`)

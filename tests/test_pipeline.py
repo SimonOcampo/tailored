@@ -17,7 +17,7 @@ from backend.app.models import (
 )
 from backend.app.schemas import FetchResult, UsageInfo
 from backend.app.services import fetcher, pipeline, render
-from backend.app.services.claude import ClaudeService
+from backend.app.services.deepseek import DeepSeekService
 from backend.app.services.intake import IntakeResult
 
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "backend" / "app" / "fixtures"
@@ -29,8 +29,8 @@ POSTING_TEXT = (
 )
 
 
-class RecordingClaude(ClaudeService):
-    """Fake-mode ClaudeService that records every structured() call's kwargs."""
+class RecordingClaude(DeepSeekService):
+    """Fake-mode DeepSeekService that records every structured() call's kwargs."""
 
     def __init__(self, fixtures_dir: Path):
         super().__init__(fake_mode=True, fixtures_dir=fixtures_dir)
@@ -53,12 +53,12 @@ class RecordingClaude(ClaudeService):
 
 
 @pytest.fixture()
-def claude_fake() -> RecordingClaude:
+def deepseek_fake() -> RecordingClaude:
     return RecordingClaude(FIXTURES_DIR)
 
 
 class BilledClaude(RecordingClaude):
-    """Fake-mode ClaudeService stand-in that reports nonzero usage.
+    """Fake-mode DeepSeekService stand-in that reports nonzero usage.
 
     Fake mode otherwise reports UsageInfo(0, 0, 0.0) for every call, which
     makes accumulated usage indistinguishable between one and two attempts.
@@ -105,9 +105,9 @@ def pdf_faked(monkeypatch):
     monkeypatch.setattr(render, "render_pdf", _fake_pdf)
 
 
-def seed_application(engine, claude_fake, depth="standard", template="slate") -> int:
+def seed_application(engine, deepseek_fake, depth="standard", template="slate") -> int:
     """Create Profile (from the intake fixture) + Job + queued Application."""
-    intake, _usage = claude_fake.structured(
+    intake, _usage = deepseek_fake.structured(
         task="intake", system="seed", user_content="seed", schema_model=IntakeResult
     )
     with Session(engine) as session:
@@ -129,10 +129,10 @@ def seed_application(engine, claude_fake, depth="standard", template="slate") ->
 
 
 def test_process_application_reaches_ready_with_exports(
-    engine, claude_fake, pipeline_settings, fetched_ok, pdf_faked
+    engine, deepseek_fake, pipeline_settings, fetched_ok, pdf_faked
 ):
-    app_id = seed_application(engine, claude_fake, depth="standard")
-    pipeline.process_application(app_id, engine=engine, claude=claude_fake)
+    app_id = seed_application(engine, deepseek_fake, depth="standard")
+    pipeline.process_application(app_id, engine=engine, deepseek=deepseek_fake)
 
     with Session(engine) as session:
         app = session.get(Application, app_id)
@@ -171,15 +171,15 @@ def test_process_application_reaches_ready_with_exports(
     assert (export_dir / "resume.pdf").read_bytes() == b"%PDF-1.4 fake"
     assert (export_dir / "cover_letter.pdf").read_bytes() == b"%PDF-1.4 fake"
 
-    tasks = [c["task"] for c in claude_fake.calls]
+    tasks = [c["task"] for c in deepseek_fake.calls]
     assert tasks == ["intake", "parse_posting", "research_standard", "tailor"]
 
 
 def test_quick_depth_skips_research(
-    engine, claude_fake, pipeline_settings, fetched_ok, pdf_faked
+    engine, deepseek_fake, pipeline_settings, fetched_ok, pdf_faked
 ):
-    app_id = seed_application(engine, claude_fake, depth="quick")
-    pipeline.process_application(app_id, engine=engine, claude=claude_fake)
+    app_id = seed_application(engine, deepseek_fake, depth="quick")
+    pipeline.process_application(app_id, engine=engine, deepseek=deepseek_fake)
 
     with Session(engine) as session:
         app = session.get(Application, app_id)
@@ -190,20 +190,20 @@ def test_quick_depth_skips_research(
         ).all()
         assert briefs == []
 
-    tasks = [c["task"] for c in claude_fake.calls]
+    tasks = [c["task"] for c in deepseek_fake.calls]
     assert "research_standard" not in tasks
     assert "research_deep" not in tasks
 
 
 def test_needs_paste_short_circuits(
-    engine, claude_fake, pipeline_settings, pdf_faked, monkeypatch
+    engine, deepseek_fake, pipeline_settings, pdf_faked, monkeypatch
 ):
     monkeypatch.setattr(
         fetcher, "fetch_posting",
         lambda url, timeout=20.0: FetchResult(status="needs_paste", reason="HTTP 403"),
     )
-    app_id = seed_application(engine, claude_fake)
-    pipeline.process_application(app_id, engine=engine, claude=claude_fake)
+    app_id = seed_application(engine, deepseek_fake)
+    pipeline.process_application(app_id, engine=engine, deepseek=deepseek_fake)
 
     with Session(engine) as session:
         app = session.get(Application, app_id)
@@ -211,12 +211,12 @@ def test_needs_paste_short_circuits(
         job = session.get(Job, app.job_id)
         assert job.fetch_status == "needs_paste"
 
-    tasks = [c["task"] for c in claude_fake.calls]
+    tasks = [c["task"] for c in deepseek_fake.calls]
     assert tasks == ["intake"]  # only the seeding call; no pipeline API calls
 
 
 def test_truthfulness_failure_sets_error(
-    engine, claude_fake, pipeline_settings, fetched_ok, pdf_faked, monkeypatch
+    engine, deepseek_fake, pipeline_settings, fetched_ok, pdf_faked, monkeypatch
 ):
     monkeypatch.setattr(
         pipeline, "verify_truthfulness",
@@ -225,8 +225,8 @@ def test_truthfulness_failure_sets_error(
             "any master-profile experience"
         ],
     )
-    app_id = seed_application(engine, claude_fake)
-    pipeline.process_application(app_id, engine=engine, claude=claude_fake)
+    app_id = seed_application(engine, deepseek_fake)
+    pipeline.process_application(app_id, engine=engine, deepseek=deepseek_fake)
 
     with Session(engine) as session:
         app = session.get(Application, app_id)
@@ -234,7 +234,7 @@ def test_truthfulness_failure_sets_error(
         assert "Fake Corp" in (app.error_message or "")
 
 
-def test_mark_error_writes_status_after_failed_transaction(engine, claude_fake):
+def test_mark_error_writes_status_after_failed_transaction(engine, deepseek_fake):
     """_mark_error must record status='error' even when the session's
     transaction already failed (e.g. a SQLite "database is locked"
     OperationalError during a prior commit).
@@ -248,7 +248,7 @@ def test_mark_error_writes_status_after_failed_transaction(engine, claude_fake):
     on commit) on an unrelated row, leaving the session's transaction
     unusable, then calls `_mark_error` on the already-loaded `app` row.
     """
-    app_id = seed_application(engine, claude_fake)
+    app_id = seed_application(engine, deepseek_fake)
     with Session(engine) as session:
         job_id = session.get(Application, app_id).job_id
         app_row = session.get(Application, app_id)
@@ -270,19 +270,19 @@ def test_mark_error_writes_status_after_failed_transaction(engine, claude_fake):
 
 
 def test_resume_after_paste_completes_needs_paste_application(
-    engine, claude_fake, pipeline_settings, pdf_faked, monkeypatch
+    engine, deepseek_fake, pipeline_settings, pdf_faked, monkeypatch
 ):
     monkeypatch.setattr(
         fetcher, "fetch_posting",
         lambda url, timeout=20.0: FetchResult(status="needs_paste", reason="HTTP 403"),
     )
-    app_id = seed_application(engine, claude_fake)
-    pipeline.process_application(app_id, engine=engine, claude=claude_fake)
+    app_id = seed_application(engine, deepseek_fake)
+    pipeline.process_application(app_id, engine=engine, deepseek=deepseek_fake)
 
     with Session(engine) as session:
         assert session.get(Application, app_id).status == "needs_paste"
 
-    pipeline.resume_after_paste(app_id, POSTING_TEXT, engine=engine, claude=claude_fake)
+    pipeline.resume_after_paste(app_id, POSTING_TEXT, engine=engine, deepseek=deepseek_fake)
 
     with Session(engine) as session:
         app = session.get(Application, app_id)
@@ -294,12 +294,12 @@ def test_resume_after_paste_completes_needs_paste_application(
 
 
 def test_regenerate_bumps_version_and_snapshots(
-    engine, claude_fake, pipeline_settings, fetched_ok, pdf_faked
+    engine, deepseek_fake, pipeline_settings, fetched_ok, pdf_faked
 ):
-    app_id = seed_application(engine, claude_fake)
-    pipeline.process_application(app_id, engine=engine, claude=claude_fake)
+    app_id = seed_application(engine, deepseek_fake)
+    pipeline.process_application(app_id, engine=engine, deepseek=deepseek_fake)
     pipeline.regenerate_application(
-        app_id, "Lead with the migration project", engine=engine, claude=claude_fake
+        app_id, "Lead with the migration project", engine=engine, deepseek=deepseek_fake
     )
 
     with Session(engine) as session:
@@ -313,7 +313,7 @@ def test_regenerate_bumps_version_and_snapshots(
         ).all()
         assert [v.version for v in versions] == [1, 2]
 
-    tailor_calls = [c for c in claude_fake.calls if c["task"] == "tailor"]
+    tailor_calls = [c for c in deepseek_fake.calls if c["task"] == "tailor"]
     assert len(tailor_calls) == 2
     assert "Lead with the migration project" in tailor_calls[-1]["user_content"]
 
@@ -330,12 +330,12 @@ def _style_failure_once():
 
 
 def test_a_style_failure_retries_tailoring_once_and_succeeds(
-    engine, claude_fake, pipeline_settings, fetched_ok, pdf_faked, monkeypatch
+    engine, deepseek_fake, pipeline_settings, fetched_ok, pdf_faked, monkeypatch
 ):
     check, calls = _style_failure_once()
     monkeypatch.setattr(pipeline, "check_style", check)
-    app_id = seed_application(engine, claude_fake)
-    pipeline.process_application(app_id, engine=engine, claude=claude_fake)
+    app_id = seed_application(engine, deepseek_fake)
+    pipeline.process_application(app_id, engine=engine, deepseek=deepseek_fake)
 
     with Session(engine) as session:
         app = session.get(Application, app_id)
@@ -344,30 +344,30 @@ def test_a_style_failure_retries_tailoring_once_and_succeeds(
 
 
 def test_the_retry_passes_the_violations_back_to_the_model(
-    engine, claude_fake, pipeline_settings, fetched_ok, pdf_faked, monkeypatch
+    engine, deepseek_fake, pipeline_settings, fetched_ok, pdf_faked, monkeypatch
 ):
     """A retry that does not say what was wrong is just a second dice roll."""
     check, _calls = _style_failure_once()
     monkeypatch.setattr(pipeline, "check_style", check)
-    app_id = seed_application(engine, claude_fake)
-    pipeline.process_application(app_id, engine=engine, claude=claude_fake)
+    app_id = seed_application(engine, deepseek_fake)
+    pipeline.process_application(app_id, engine=engine, deepseek=deepseek_fake)
 
-    tailor_calls = [c for c in claude_fake.calls if c.get("task") == "tailor"]
+    tailor_calls = [c for c in deepseek_fake.calls if c.get("task") == "tailor"]
     assert len(tailor_calls) == 2
     assert "em dash" in tailor_calls[-1]["user_content"]
     assert "em dash" not in tailor_calls[0]["user_content"]
 
 
 def test_two_style_failures_mark_the_application_error(
-    engine, claude_fake, pipeline_settings, fetched_ok, pdf_faked, monkeypatch
+    engine, deepseek_fake, pipeline_settings, fetched_ok, pdf_faked, monkeypatch
 ):
     monkeypatch.setattr(
         pipeline,
         "check_style",
         lambda resume, cover_md: ["Summary: em dash. Rewrite the sentence."],
     )
-    app_id = seed_application(engine, claude_fake)
-    pipeline.process_application(app_id, engine=engine, claude=claude_fake)
+    app_id = seed_application(engine, deepseek_fake)
+    pipeline.process_application(app_id, engine=engine, deepseek=deepseek_fake)
 
     with Session(engine) as session:
         app = session.get(Application, app_id)
@@ -377,32 +377,32 @@ def test_two_style_failures_mark_the_application_error(
 
 
 def test_a_style_failure_never_loops(
-    engine, claude_fake, pipeline_settings, fetched_ok, pdf_faked, monkeypatch
+    engine, deepseek_fake, pipeline_settings, fetched_ok, pdf_faked, monkeypatch
 ):
     """Exactly two tailoring calls, never three. Burning tokens in a cycle is
     worse than surfacing the problem."""
     monkeypatch.setattr(
         pipeline, "check_style", lambda resume, cover_md: ["Summary: em dash."]
     )
-    app_id = seed_application(engine, claude_fake)
-    pipeline.process_application(app_id, engine=engine, claude=claude_fake)
+    app_id = seed_application(engine, deepseek_fake)
+    pipeline.process_application(app_id, engine=engine, deepseek=deepseek_fake)
 
-    assert len([c for c in claude_fake.calls if c.get("task") == "tailor"]) == 2
+    assert len([c for c in deepseek_fake.calls if c.get("task") == "tailor"]) == 2
 
 
 def test_the_retry_is_billed(
     engine, pipeline_settings, fetched_ok, pdf_faked, monkeypatch
 ):
     """Two API calls cost two API calls. A cost that hides the retry is a lie."""
-    claude = BilledClaude(FIXTURES_DIR)
+    deepseek = BilledClaude(FIXTURES_DIR)
     check, _calls = _style_failure_once()
     monkeypatch.setattr(pipeline, "check_style", check)
-    retried_id = seed_application(engine, claude)
-    pipeline.process_application(retried_id, engine=engine, claude=claude)
+    retried_id = seed_application(engine, deepseek)
+    pipeline.process_application(retried_id, engine=engine, deepseek=deepseek)
 
     monkeypatch.setattr(pipeline, "check_style", lambda resume, cover_md: [])
-    clean_id = seed_application(engine, claude)
-    pipeline.process_application(clean_id, engine=engine, claude=claude)
+    clean_id = seed_application(engine, deepseek)
+    pipeline.process_application(clean_id, engine=engine, deepseek=deepseek)
 
     with Session(engine) as session:
         retried = session.get(Application, retried_id)
@@ -416,12 +416,12 @@ def test_failed_attempts_are_still_billed(
 ):
     """Tokens spent are spent. A run that ends in error must still show them,
     or the cost of a failed generation silently disappears from the ledger."""
-    claude = BilledClaude(FIXTURES_DIR)
+    deepseek = BilledClaude(FIXTURES_DIR)
     monkeypatch.setattr(
         pipeline, "check_style", lambda resume, cover_md: ["Summary: em dash."]
     )
-    app_id = seed_application(engine, claude)
-    pipeline.process_application(app_id, engine=engine, claude=claude)
+    app_id = seed_application(engine, deepseek)
+    pipeline.process_application(app_id, engine=engine, deepseek=deepseek)
 
     with Session(engine) as session:
         app = session.get(Application, app_id)
@@ -433,23 +433,23 @@ def test_failed_attempts_are_still_billed(
 
 
 def test_truthfulness_is_still_never_retried(
-    engine, claude_fake, pipeline_settings, fetched_ok, pdf_faked, monkeypatch
+    engine, deepseek_fake, pipeline_settings, fetched_ok, pdf_faked, monkeypatch
 ):
     monkeypatch.setattr(
         pipeline, "verify_truthfulness", lambda resume, profile: ["invented Fake Corp"]
     )
-    app_id = seed_application(engine, claude_fake)
-    pipeline.process_application(app_id, engine=engine, claude=claude_fake)
+    app_id = seed_application(engine, deepseek_fake)
+    pipeline.process_application(app_id, engine=engine, deepseek=deepseek_fake)
 
     with Session(engine) as session:
         app = session.get(Application, app_id)
         assert app.status == "error"
         assert "Truthfulness" in (app.error_message or "")
-    assert len([c for c in claude_fake.calls if c.get("task") == "tailor"]) == 1
+    assert len([c for c in deepseek_fake.calls if c.get("task") == "tailor"]) == 1
 
 
 def test_a_retry_that_becomes_untruthful_is_rejected(
-    engine, claude_fake, pipeline_settings, fetched_ok, pdf_faked, monkeypatch
+    engine, deepseek_fake, pipeline_settings, fetched_ok, pdf_faked, monkeypatch
 ):
     """Both gates run on the retry, not just the one that failed."""
     style_calls = {"n": 0}
@@ -466,8 +466,8 @@ def test_a_retry_that_becomes_untruthful_is_rejected(
 
     monkeypatch.setattr(pipeline, "check_style", _style)
     monkeypatch.setattr(pipeline, "verify_truthfulness", _truth)
-    app_id = seed_application(engine, claude_fake)
-    pipeline.process_application(app_id, engine=engine, claude=claude_fake)
+    app_id = seed_application(engine, deepseek_fake)
+    pipeline.process_application(app_id, engine=engine, deepseek=deepseek_fake)
 
     with Session(engine) as session:
         app = session.get(Application, app_id)
@@ -476,21 +476,21 @@ def test_a_retry_that_becomes_untruthful_is_rejected(
 
 
 def test_a_clean_generation_makes_exactly_one_tailoring_call(
-    engine, claude_fake, pipeline_settings, fetched_ok, pdf_faked
+    engine, deepseek_fake, pipeline_settings, fetched_ok, pdf_faked
 ):
     """The retry must not fire on the happy path."""
-    app_id = seed_application(engine, claude_fake)
-    pipeline.process_application(app_id, engine=engine, claude=claude_fake)
+    app_id = seed_application(engine, deepseek_fake)
+    pipeline.process_application(app_id, engine=engine, deepseek=deepseek_fake)
 
     with Session(engine) as session:
         assert session.get(Application, app_id).status == "ready"
-    assert len([c for c in claude_fake.calls if c.get("task") == "tailor"]) == 1
+    assert len([c for c in deepseek_fake.calls if c.get("task") == "tailor"]) == 1
 
 
 def test_the_pipeline_passes_voice_notes_to_the_model(
-    engine, claude_fake, pipeline_settings, fetched_ok, pdf_faked
+    engine, deepseek_fake, pipeline_settings, fetched_ok, pdf_faked
 ):
-    app_id = seed_application(engine, claude_fake)
+    app_id = seed_application(engine, deepseek_fake)
     with Session(engine) as session:
         app = session.get(Application, app_id)
         profile = session.get(Profile, app.profile_id)
@@ -498,15 +498,15 @@ def test_the_pipeline_passes_voice_notes_to_the_model(
         session.add(profile)
         session.commit()
 
-    pipeline.process_application(app_id, engine=engine, claude=claude_fake)
-    tailor_calls = [c for c in claude_fake.calls if c.get("task") == "tailor"]
+    pipeline.process_application(app_id, engine=engine, deepseek=deepseek_fake)
+    tailor_calls = [c for c in deepseek_fake.calls if c.get("task") == "tailor"]
     assert "Plain and direct. Short sentences." in tailor_calls[-1]["user_content"]
 
 
 def test_the_pipeline_passes_the_most_recent_source_document_as_voice(
-    engine, claude_fake, pipeline_settings, fetched_ok, pdf_faked
+    engine, deepseek_fake, pipeline_settings, fetched_ok, pdf_faked
 ):
-    app_id = seed_application(engine, claude_fake)
+    app_id = seed_application(engine, deepseek_fake)
     with Session(engine) as session:
         app = session.get(Application, app_id)
         session.add(
@@ -524,21 +524,21 @@ def test_the_pipeline_passes_the_most_recent_source_document_as_voice(
         )
         session.commit()
 
-    pipeline.process_application(app_id, engine=engine, claude=claude_fake)
-    content = [c for c in claude_fake.calls if c.get("task") == "tailor"][-1]["user_content"]
+    pipeline.process_application(app_id, engine=engine, deepseek=deepseek_fake)
+    content = [c for c in deepseek_fake.calls if c.get("task") == "tailor"][-1]["user_content"]
     assert "NEWER WRITING SAMPLE" in content
     assert "OLDER WRITING SAMPLE" not in content
 
 
 def test_a_voice_sample_cannot_smuggle_in_an_employer(
-    engine, claude_fake, pipeline_settings, fetched_ok, pdf_faked, monkeypatch
+    engine, deepseek_fake, pipeline_settings, fetched_ok, pdf_faked, monkeypatch
 ):
     """The voice sample is style-only, and truthfulness is what makes that true.
 
     A model that lifts an employer out of the sample is rejected by the existing
     structural guard, which is the argument for having built it structurally.
     """
-    app_id = seed_application(engine, claude_fake)
+    app_id = seed_application(engine, deepseek_fake)
     with Session(engine) as session:
         app = session.get(Application, app_id)
         session.add(
@@ -560,7 +560,7 @@ def test_a_voice_sample_cannot_smuggle_in_an_employer(
         return real(resume, profile)
 
     monkeypatch.setattr(pipeline, "verify_truthfulness", _tempted)
-    pipeline.process_application(app_id, engine=engine, claude=claude_fake)
+    pipeline.process_application(app_id, engine=engine, deepseek=deepseek_fake)
 
     with Session(engine) as session:
         app = session.get(Application, app_id)

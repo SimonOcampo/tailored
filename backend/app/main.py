@@ -13,7 +13,7 @@ from . import demo
 from .api import api_router
 from .config import Settings, get_settings
 from .db import get_engine, init_db
-from .services.claude import make_claude
+from .services.deepseek import make_deepseek
 
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
@@ -31,13 +31,13 @@ def create_app(settings: Settings | None = None, engine=None) -> FastAPI:
             # generate real demo PDFs; the sync API refuses to run inside an
             # already-running asyncio loop, so it must be offloaded to a
             # worker thread rather than awaited directly here.
-            await run_in_threadpool(demo.seed_demo, engine, app.state.claude, settings.data_dir)
+            await run_in_threadpool(demo.seed_demo, engine, app.state.deepseek, settings.data_dir)
         yield
 
     app = FastAPI(title="Tailored", lifespan=lifespan)
     app.state.settings = settings
     app.state.engine = engine
-    app.state.claude = make_claude(settings)
+    app.state.deepseek = make_deepseek(settings)
 
     app.add_middleware(
         CORSMiddleware,

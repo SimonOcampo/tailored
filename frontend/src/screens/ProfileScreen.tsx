@@ -793,7 +793,7 @@ function PersonEditor({ person }: { person: ProfileSummary }) {
           <div className="card">
             <div className="card-title">Build</div>
             <p className="muted">
-              Structures every document above into the master profile with one Claude call.
+              Structures every document above into the master profile with one DeepSeek call.
               Re-running replaces the current structured profile.
             </p>
             <button className="btn btn-primary" onClick={handleBuild} disabled={busy !== null}>
@@ -802,7 +802,7 @@ function PersonEditor({ person }: { person: ProfileSummary }) {
             </button>
             {buildUsage && (
               <p className="muted">
-                Done — {buildUsage.input_tokens} tokens in, {buildUsage.output_tokens} out, cost $
+                Done — {buildUsage.input_tokens} tokens in, {buildUsage.output_tokens} out, estimated cost $
                 {buildUsage.cost_usd.toFixed(4)}
               </p>
             )}

@@ -92,7 +92,7 @@ def test_the_registry_is_cleared_when_the_body_raises():
 
 
 def test_process_application_is_live_while_running_and_cleared_after_a_failure(
-        engine, claude_fake, monkeypatch):
+        engine, deepseek_fake, monkeypatch):
     ada = _person(engine)
     app_id = _application(engine, ada, status="queued", minutes_ago=0)
     seen = []
@@ -102,7 +102,7 @@ def test_process_application_is_live_while_running_and_cleared_after_a_failure(
         raise RuntimeError("network down")
 
     monkeypatch.setattr(pipeline.fetcher, "fetch_posting", _failing_fetch)
-    pipeline.process_application(app_id, engine=engine, claude=claude_fake)
+    pipeline.process_application(app_id, engine=engine, deepseek=deepseek_fake)
 
     assert seen == [True]
     assert not pipeline.is_live(app_id)
@@ -111,7 +111,7 @@ def test_process_application_is_live_while_running_and_cleared_after_a_failure(
 
 
 def test_resume_after_paste_and_regenerate_clear_the_registry(
-        engine, claude_fake, monkeypatch):
+        engine, deepseek_fake, monkeypatch):
     ada = _person(engine)
     app_id = _application(engine, ada, status="needs_paste", minutes_ago=0)
     seen = []
@@ -122,9 +122,9 @@ def test_resume_after_paste_and_regenerate_clear_the_registry(
 
     monkeypatch.setattr(pipeline, "_run_from_research", _failing)
     pipeline.resume_after_paste(app_id, "posting text", engine=engine,
-                                claude=claude_fake)
+                                deepseek=deepseek_fake)
     monkeypatch.setattr(pipeline, "get_parsed", _failing)
-    pipeline.regenerate_application(app_id, "", engine=engine, claude=claude_fake)
+    pipeline.regenerate_application(app_id, "", engine=engine, deepseek=deepseek_fake)
 
     assert seen == [True, True]
     assert not pipeline.is_live(app_id)

@@ -2,7 +2,7 @@
 
 Emits the exact, OS-aware `claude mcp add` command (paths taken from the running
 interpreter and the project root) so users never hand-substitute paths. Never
-returns the Anthropic API key value.
+returns the DeepSeek API key value.
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from ..config import PROJECT_ROOT
 
 router = APIRouter()
 
-ENV_LINE_TEMPLATE = "ANTHROPIC_API_KEY=sk-ant-..."
+ENV_LINE_TEMPLATE = "DEEPSEEK_API_KEY=sk-..."
 
 
 @router.get("/setup")

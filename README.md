@@ -18,11 +18,11 @@ cliches. The check runs on the write path, so it holds for both the built-in
 pipeline and any MCP agent, whichever model produced the text. The API pipeline
 retries once with the violations attached; an agent gets the list back and
 corrects it.
-- **Two ways to supply the intelligence, one contract.** Use the built-in Anthropic API pipeline (paste a batch of job URLs and walk away), or connect your own agent over MCP — a from-scratch MCP server (14 tools) that lets Claude Code, Codex, or any MCP-capable client do the work on its own subscription, no API key, and read login-walled postings its browser can reach. The same truthfulness guard applies to both.
+- **Two ways to supply the intelligence, one contract.** Use the built-in DeepSeek API pipeline (paste a batch of job URLs and walk away), or connect your own agent over MCP — a from-scratch MCP server (14 tools) that lets Claude Code, Codex, or any MCP-capable client do the work on its own subscription, no API key, and read login-walled postings its browser can reach. The same truthfulness guard applies to both.
 - **Your codebase becomes resume evidence.** A portfolio-scan prompt plus an MCP write tool let an agent read the repos in your workspace and write evidence-backed, skill-tagged project entries straight into your profile (additive-only, validated, never destructive).
-- **Built to be handed to a non-engineer.** Double-click launcher (Windows `.bat` + Unix `.sh`) that self-installs on first run, a fully offline demo mode needing no API key, eight print-tuned templates exporting PDF / HTML / ATS plain text, dark mode, and a committed frontend build so cloning needs only Python.
+- **Built to be handed to a non-engineer.** Double-click launcher (Windows `.bat` + Unix `.sh`) that self-installs on first run, a fully offline demo mode needing no API key, nine print-tuned templates exporting PDF / HTML / ATS plain text, dark mode, and a committed frontend build so cloning needs only Python.
 - **It tracks the job hunt, not just the generation.** Stages from Saved through Offer, a dated timeline for callbacks, interviews and notes, archive and permanent delete, and saved jobs you can park for free and generate later.
-- **Engineered, not vibe-coded.** Spec → implementation plan → test-driven development, every task independently reviewed. 1119 automated tests (851 backend including real headless-Chromium PDF rendering and text extraction, 268 frontend), and validated end to end against the live Anthropic API — two API-only bugs were found and fixed that way.
+- **Tested across the full flow.** Backend and frontend regression tests include real Chromium PDF rendering, template preservation, public-source checks, and mocked DeepSeek HTTP/SSE requests. Live paid-provider testing requires a configured key.
 
 Job URLs can be queued for immediate generation or parked as a saved job to
 generate later at no cost. For each job URL you choose to generate, it runs a
@@ -33,12 +33,12 @@ four-stage pipeline:
    job data).
 2. **Research** — parses the posting; optionally researches the company
    (per-job depth dial, see below).
-3. **Tailor** — Claude (`claude-opus-4-8`) selects and emphasizes the most relevant
+3. **Tailor** — DeepSeek (`deepseek-flash`) selects and emphasizes the most relevant
    parts of your Master Profile and writes a matching cover letter.
-4. **Render** — eight print-tuned templates (see [Templates](#templates)) → PDF,
+4. **Render** — nine print-tuned templates (see [Templates](#templates)) → PDF,
    standalone HTML, and ATS-safe plain text.
 
-Compare all eight templates side by side, with live previews, on the in-app
+Compare all nine templates side by side, with live previews, on the in-app
 **Templates** page. The UI also follows your system's light/dark preference
 automatically, with a one-click override in the nav bar or Settings.
 
@@ -47,8 +47,8 @@ Got a workspace full of your own repos? Use the
 capable coding agent) to turn your actual codebases into evidence-backed project
 material for your master profile.
 
-Everything runs on your machine. The only network traffic is fetching postings and
-calling the Anthropic API. All state lives in the `data/` folder — a backup is
+Everything runs on your machine. Network traffic consists of fetching postings and public evidence pages, and
+calling the DeepSeek API. All state lives in the `data/` folder — a backup is
 copying one folder.
 
 ## Quickstart (Windows)
@@ -62,8 +62,11 @@ The first launch does the setup for you — creates a virtual environment, insta
 dependencies, downloads the Chromium browser used for PDF export — which takes a
 few minutes. Every launch after that starts in a couple of seconds.
 
-If you don't have an [Anthropic API key](https://console.anthropic.com/) yet, the
+If you don't have a [DeepSeek API key](https://platform.deepseek.com/) yet, the
 launcher offers a **demo mode** with sample data — no key or network access needed.
+If you use a connected agent, it can build the master profile from your uploaded
+documents through MCP with its own model; the Profiles screen's **Build** button
+continues to use the built-in DeepSeek pipeline.
 
 **Having issues?** See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common solutions.
 Or try: `Tailored.bat --clean` to rebuild the environment from scratch.
@@ -91,7 +94,7 @@ Or try: `bash start_tailored.sh --clean` to rebuild the environment from scratch
 This is what `Tailored.bat` / `start_tailored.sh` automate above. Use it if you're
 developing, on an unsupported OS, or just want full manual control.
 
-You need **Python 3.11+** and an [Anthropic API key](https://console.anthropic.com/).
+You need **Python 3.11+** and a [DeepSeek API key](https://platform.deepseek.com/).
 Node.js is **not** required — the built frontend is committed.
 
 ```
@@ -107,7 +110,7 @@ copy .env.example .env          # macOS/Linux: cp .env.example .env
 Edit `.env` and set your key:
 
 ```
-ANTHROPIC_API_KEY=sk-ant-...
+DEEPSEEK_API_KEY=sk-...
 ```
 
 Then start it:
@@ -122,7 +125,7 @@ The server starts on http://127.0.0.1:8547 and your browser opens automatically.
 
 Tailored ships an MCP server (`backend/mcp_server.py`) that lets any
 MCP-capable agent — Claude Code, Codex CLI, and friends — act as the
-intelligence instead of the built-in Anthropic API pipeline. Your coding
+intelligence instead of the built-in DeepSeek API pipeline. Your coding
 agent's subscription does the thinking, so **no API key is needed**, and
 because the agent fetches postings with its own browser/tools, it can read
 login-walled postings the app's fetcher cannot.
@@ -135,10 +138,23 @@ command):
 claude mcp add tailored -- "<abs path>\.venv\Scripts\python.exe" "<abs path>\backend\mcp_server.py"
 ```
 
+For Codex CLI, register the same server with:
+
+```
+codex mcp add tailored -- "<abs path>\.venv\Scripts\python.exe" "<abs path>\backend\mcp_server.py"
+```
+
 Then ask your agent to read Tailored's workflow guide (the
 `get_workflow_guide` tool), and from there it's just:
 
 > tailor my profile for &lt;job url&gt;
+
+To build the master profile itself, ask the agent to build the selected person's
+profile from their uploaded documents. The agent calls `get_profile_documents`
+and `save_built_master_profile`. This path uses the connected agent's model,
+does not call DeepSeek, validates the complete profile, and rejects stale saves.
+It replaces the full master profile and submitted contact fields. The Profiles
+screen's Build button continues to preserve contact fields already entered there.
 
 When several people share the install, say whose profile to use. The
 copyable prompts on the Getting Started page name the person selected in the
@@ -210,20 +226,37 @@ application back on the next start.
 
 ## Research depth = cost dial
 
-Research depth is chosen per job when you add it, and the Add Jobs form starts
-on the selected person's default depth from Settings. Approximate cost per application
-(Claude Opus 4.8; real token usage and cost are recorded per application and shown on
-each application's page):
+Research depth is chosen per job when you add it. Every depth generates the
+resume and attempts contact discovery and outreach drafts.
 
-| Depth      | What it does                                                        | Approx. cost |
-|------------|---------------------------------------------------------------------|--------------|
-| `quick`    | Parse the posting only                                              | $0.15-0.30   |
-| `standard` | + fetch the company's own site (mission, products, values)          | $0.30-0.60   |
-| `deep`     | + web search: recent news, products, tech-stack & culture signals   | $1-3         |
+| Depth | Company research |
+|---|---|
+| `quick` | Parsed posting only |
+| `standard` | Company's own website: mission, products, values |
+| `deep` | Website plus web search for news, products, technology and culture |
+
+The built-in provider is **DeepSeek Flash**, using `DEEPSEEK_API_KEY`. It uses
+DeepSeek's documented Messages compatibility endpoint through the installed
+Anthropic SDK; no requests are sent to Anthropic. Structured output is validated
+locally with one correction attempt. DeepSeek hosts web search; bounded public
+HTTPS retrieval implements the fetch tool, preserving company-domain restrictions
+on redirects. No new search subscription is needed.
+
+Displayed costs are conservative estimates at the documented peak token rates,
+including cached input and successful searches. Off-peak billing may be lower.
+Existing application costs and stored information are unchanged. See
+[DeepSeek pricing](https://api-docs.deepseek.com/quick_start/pricing/) and the
+[Messages compatibility guide](https://api-docs.deepseek.com/guides/anthropic_api/).
+
+Migration: set `DEEPSEEK_API_KEY` in `.env` and restart Tailored. The old
+`ANTHROPIC_API_KEY` is ignored; it is never reused as a DeepSeek credential.
+No database conversion is needed. Rollback means restoring the prior code and
+its provider key; profiles, applications, exports and historical costs remain
+compatible. The connected-agent MCP workflow is independent of this API key.
 
 ## Templates
 
-Eight print-tuned templates. Every one is single-column with no sidebars, icons,
+Nine print-tuned templates. Every one is single-column with no sidebars, icons,
 skill bars, or text baked into images, because all of those break ATS and LLM
 parsing. They differ in typography, rhythm and hierarchy, not in structure.
 
@@ -237,6 +270,7 @@ parsing. They differ in typography, rhythm and hierarchy, not in structure.
 | Quarto | `quarto` | Academic CV that carries long publication lists gracefully across pages. | Academia, research, grants |
 | Dossier | `dossier` | Dense sans-serif that fits a long career onto fewer pages without crowding. | Fifteen or more years of history |
 | Plainwork | `plainwork` | Deliberately unstyled: no rules, no colour, no letterspacing, system fonts only. | Workday and government portals, maximum ATS compatibility |
+| Classic | `classic` | Compact serif layout with a centered header, ruled headings, and education-first order. | Students and early-career engineering roles |
 
 Templates are discovered from `backend/templates/*/template.json`, so the API,
 both dropdowns and the gallery all stay in step automatically. You can switch an
@@ -246,8 +280,9 @@ re-renders the resume you already have, with no model call and no cost.
 Every typeface except Meridian's and Plainwork's system stacks is a latin-subset
 [SIL Open Font License](https://openfontlicense.org/) `.woff2` vendored into the
 repo and base64-inlined at render time, so an exported `resume.html` is a single
-standalone file that needs no network access to render correctly. Adding a ninth
-template is three files and no code: see [docs/EXTENDING.md](docs/EXTENDING.md).
+standalone file that needs no network access to render correctly. A template
+using an existing structural hint needs three files and no registry edits; see
+[docs/EXTENDING.md](docs/EXTENDING.md).
 
 ## Truthfulness
 
@@ -376,6 +411,84 @@ each agent session from the person's name rather than a remembered id.
 
 ## Development
 
+### Job description to resume and outreach
+
+On **Add Jobs**, choose **Job URLs** (one per line) or **Paste job description**
+(an original URL is optional). Generation uses the selected person's Master
+Profile, applies the guide and job-title keyword references, and exports the
+Headless resume as PDF, Word, HTML, and ATS text. A single new job opens its
+application directly. Your information bank must contain the facts to use.
+
+The compact resume layout keeps GPA inline with education, uses Education when
+no certificates are present, and shows each project name beside its clickable
+repository link without a description. Contact links include phone, email and
+short web labels. A candidate-supplied `contact.authorization_note` appears
+between the name and contact line. The per-profile `one_page_resume` preference
+measures the PDF before saving; work and project evidence takes priority over
+optional skills. Fitting preserves the information bank and saves the same
+selected content used by the preview and every export.
+
+After the resume is rendered, generation searches public sources for up to three
+relevant recruiters, hiring managers, or teammates. The **Outreach** tab shows
+the employment evidence, published professional email when available, LinkedIn
+fallback, and short unsent drafts. Messages use Dale Carnegie's principles of
+sincere interest, specific appreciation, respect for time, and one small question.
+Email drafts have a 100-word maximum; LinkedIn drafts have a 280-character maximum.
+Copy a draft, review it, and send it yourself. The app never sends messages.
+
+Employment and channel evidence is checked against reachable public company or
+LinkedIn pages. Emails are never constructed from naming patterns. A published
+email is not a guarantee of inbox deliverability, and blocked/private pages may
+leave no confirmed contact. When search finds names without usable evidence,
+a separate bounded retrieval step checks their sources and personal profile
+links before drafting. Team-page links must belong to the named person.
+Search/drafting failures appear in Outreach without
+discarding the resume. Regeneration refreshes contacts and drafts. The saved
+`application.outreach_json` column is added by the existing additive migration;
+old rows remain unchanged. Rolling back code leaves this nullable column in
+place, so old readers can continue using their original fields.
+
+The built-in workflow uses the existing DeepSeek API key and server web tools,
+including an additional search/drafting cost tracked on the application. Demo
+mode does not search for real people. Connected agents can do the same research
+with their own tools and save through `save_outreach`, which uses the same
+evidence and style checks without calling DeepSeek. No additional contact-data
+subscription is required. Restart the web app and MCP server after updating.
+
+### Resume guide and job-title qualifications
+
+Both the built-in tailoring pipeline and the MCP workflow use the shared policy
+in `backend/app/services/resume_guidance.py`, adapted from the supplied
+*Resume guide 2.0* by the Headless Headhunter. It prioritizes qualifications,
+past-tense What/How/Result-or-Reason bullets, concise relevant evidence, and an
+empty headline/summary by default. Explicit candidate preferences override guide
+defaults; the master profile remains the only source of candidate facts.
+
+Resume previews and exports use the supplied Headless Resume Template, retained
+at `backend/resources/headless-resume-template.docx`. The shared HTML layout and
+`backend/templates/resume_guide.css` match its centered three-line header,
+combined Education & Certificates block, italic role lines, right-aligned dates,
+Arial typography, and page margins. A new `resume.docx` download fills the actual
+Word template, preserving its styles, numbering, page settings, and all package
+parts except the replaced body text. PDF/HTML use Chromium's layout engine;
+line wrapping can differ from Word. The template's measurements and section
+order override the guide's general advice and legacy resume identities.
+Cover letters retain their template styles. Existing
+exports change when re-rendered; existing resume text changes when regenerated.
+
+The [published qualification sheet](https://docs.google.com/spreadsheets/d/e/2PACX-1vRg7oze-BnheKtSvQH2ApktuRYyWaXOuvE9hgke4puccxX4Gs5I9-xAfxaKgRoYxYh6W1DlyqSA9e2c/pubhtml#gid=0)
+is bundled in `backend/app/fixtures/resume_keywords.json` as a November 10, 2026
+snapshot of 136 titled role entries. Blank rows and one malformed row with
+qualification prose duplicated into the title were omitted. Qualification line
+breaks, alternatives, preferred skills, and source update labels are preserved.
+This is a reference, never extra mandatory requirements or evidence that the
+candidate has a skill. The API receives up to three conservative title matches;
+the MCP guide includes the catalog for the agent to match against the full
+posting, including market. Unmatched titles use the posting alone. The snapshot
+is not refreshed automatically; update the JSON from the qualification tab to
+adopt later sheet changes. Guide bullet/keyword placement targets are writing
+guidance, not guaranteed semantic or rendered-line validation.
+
 ### Frontend (Node required for development only)
 
 ```
@@ -406,7 +519,7 @@ pytest                   # full suite, incl. Playwright PDF tests
 cd frontend; npm test    # frontend tests
 ```
 
-Tests never call the real Anthropic API — the Claude wrapper has a fixture-backed
+Tests never call the real DeepSeek API — the DeepSeek wrapper has a fixture-backed
 fake mode (the same one demo mode uses).
 
 ## Project layout
@@ -425,7 +538,7 @@ tailored/
 │   │   ├── db.py           # SQLite engine + sessions
 │   │   ├── models.py       # SQLModel entities
 │   │   ├── schemas.py      # Pydantic schemas (the resume JSON contract)
-│   │   ├── services/       # claude, intake, fetcher, research, tailor, render, pipeline
+│   │   ├── services/       # deepseek, intake, fetcher, research, tailor, render, pipeline
 │   │   ├── api/            # REST routes
 │   │   └── fixtures/       # offline fixtures (tests + demo mode)
 │   └── templates/          # one dir per resume template (template.json +
@@ -462,4 +575,4 @@ tailored/
   of erroring. Otherwise set `TAILORED_PORT` in `.env` (e.g. `TAILORED_PORT=8600`)
   and restart.
 - **Missing API key** — the app still runs; generation actions will prompt you.
-  Set `ANTHROPIC_API_KEY` in `.env`, or use demo mode (`TAILORED_FAKE=1`).
+  Set `DEEPSEEK_API_KEY` in `.env`, or use demo mode (`TAILORED_FAKE=1`).

@@ -62,6 +62,18 @@ beforeEach(() => {
 });
 
 describe("AddJobsScreen", () => {
+  it("queues a pasted description without requiring a URL", async () => {
+    renderScreen();
+    await screen.findByText(/Generated with your DeepSeek API key/i);
+    fireEvent.change(screen.getByLabelText("Job input"), { target: { value: "description" } });
+    fireEvent.change(screen.getByLabelText("Job description"), { target: { value: "Backend Engineer at Acme. Requirements: Python and SQL." } });
+    fireEvent.click(screen.getByRole("button", { name: /add and generate/i }));
+    await waitFor(() => expect(api.createApplications).toHaveBeenCalledWith(
+      JORDAN.id, [{ url: "", posting_text: "Backend Engineer at Acme. Requirements: Python and SQL.", depth: "standard", template: "slate" }],
+      "standard", "slate", true
+    ));
+  });
+
   it("parses three URL lines into three preview rows", async () => {
     renderScreen();
     await enterUrls("https://a.example/j1\nhttps://b.example/j2\n\nhttps://c.example/j3\n");
@@ -74,14 +86,14 @@ describe("AddJobsScreen", () => {
     renderScreen();
     expect(await screen.findByText(/No API key set/i)).toBeInTheDocument();
     expect(
-      screen.queryByText(/Generated with your Anthropic API key/i)
+      screen.queryByText(/Generated with your DeepSeek API key/i)
     ).not.toBeInTheDocument();
   });
 
   it("shows the plain mode note (no warning) when an API key is set", async () => {
     renderScreen();
     expect(
-      await screen.findByText(/Generated with your Anthropic API key/i)
+      await screen.findByText(/Generated with your DeepSeek API key/i)
     ).toBeInTheDocument();
     expect(screen.queryByText(/No API key set/i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /See MCP mode/ })).toHaveAttribute(

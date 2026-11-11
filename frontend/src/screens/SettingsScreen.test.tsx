@@ -55,7 +55,7 @@ describe("SettingsScreen", () => {
     renderScreen();
     expect(await screen.findByText("API key: not set")).toBeInTheDocument();
     expect(
-      screen.getByText(/Add ANTHROPIC_API_KEY to the .env file and restart/)
+      screen.getByText(/Add DEEPSEEK_API_KEY to the .env file and restart/)
     ).toBeInTheDocument();
     expect(screen.queryByText("API key: set")).not.toBeInTheDocument();
   });
@@ -72,7 +72,7 @@ describe("SettingsScreen", () => {
     expect(await screen.findByText("API key: set")).toBeInTheDocument();
     expect(screen.queryByText("API key: not set")).not.toBeInTheDocument();
     expect(
-      screen.queryByText(/Add ANTHROPIC_API_KEY to the .env file and restart to generate/)
+      screen.queryByText(/Add DEEPSEEK_API_KEY to the .env file and restart to generate/)
     ).not.toBeInTheDocument();
   });
 

@@ -1,4 +1,4 @@
-"""Tests for backend/app/services/claude.py."""
+"""Tests for backend/app/services/deepseek.py."""
 from __future__ import annotations
 
 import pytest
@@ -11,12 +11,12 @@ from backend.app.schemas import (
     TailorResult,
     UsageInfo,
 )
-from backend.app.services.claude import (
+from backend.app.services.deepseek import (
     COST_INPUT_PER_MTOK,
     COST_OUTPUT_PER_MTOK,
-    ClaudeError,
+    DeepSeekError,
     compute_cost,
-    make_claude,
+    make_deepseek,
     strict_schema,
 )
 
@@ -46,22 +46,21 @@ def _assert_all_object_nodes_strict(node) -> None:
 
 
 def test_cost_constants():
-    assert COST_INPUT_PER_MTOK == 5.00
-    assert COST_OUTPUT_PER_MTOK == 25.00
+    assert COST_INPUT_PER_MTOK == 0.3
+    assert COST_OUTPUT_PER_MTOK == 1.2
 
 
 def test_compute_cost_exact():
     assert compute_cost(0, 0) == 0.0
-    assert compute_cost(1_000_000, 0) == 5.0
-    assert compute_cost(0, 1_000_000) == 25.0
-    # 123,456 in @ $5/MTok = 0.61728; 78,900 out @ $25/MTok = 1.9725
-    assert compute_cost(123_456, 78_900) == 2.58978
+    assert compute_cost(1_000_000, 0) == 0.3
+    assert compute_cost(0, 1_000_000) == 1.2
+    assert compute_cost(123_456, 78_900) == 0.131717
+    assert compute_cost(1_000_000, 0, 1_000_000, 2) == 0.0075
 
 
 def test_compute_cost_rounds_six_decimals():
-    # 7 input tokens -> 0.000035; 3 output tokens -> 0.000075; total 0.00011
-    assert compute_cost(7, 3) == 0.00011
-    assert compute_cost(1, 0) == 0.000005
+    assert compute_cost(7, 3) == 0.000006
+    assert compute_cost(2, 0) == 0.000001
 
 
 def test_strict_schema_marks_top_level_nested_and_defs():
@@ -79,8 +78,8 @@ def test_strict_schema_on_resumedoc_covers_all_defs():
     _assert_all_object_nodes_strict(schema)
 
 
-def test_fake_mode_returns_validated_model_and_zero_usage(claude_fake):
-    parsed, usage = claude_fake.structured(
+def test_fake_mode_returns_validated_model_and_zero_usage(deepseek_fake):
+    parsed, usage = deepseek_fake.structured(
         task="parse_posting",
         system="You parse postings.",
         user_content="raw posting text here",
@@ -93,17 +92,17 @@ def test_fake_mode_returns_validated_model_and_zero_usage(claude_fake):
     assert usage == UsageInfo(input_tokens=0, output_tokens=0, cost_usd=0.0)
 
 
-def test_fake_mode_records_calls(claude_fake):
+def test_fake_mode_records_calls(deepseek_fake):
     tools = [{"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 8}]
-    claude_fake.structured(
+    deepseek_fake.structured(
         task="research_standard",
         system="Research the company.",
         user_content="ParsedPosting JSON here",
         schema_model=ResearchFindings,
         tools=tools,
     )
-    assert len(claude_fake.calls) == 1
-    assert claude_fake.calls[0] == {
+    assert len(deepseek_fake.calls) == 1
+    assert deepseek_fake.calls[0] == {
         "task": "research_standard",
         "system": "Research the company.",
         "user_content": "ParsedPosting JSON here",
@@ -112,48 +111,48 @@ def test_fake_mode_records_calls(claude_fake):
     }
 
 
-def test_fake_mode_all_fixtures_validate(claude_fake):
-    standard, _ = claude_fake.structured(
+def test_fake_mode_all_fixtures_validate(deepseek_fake):
+    standard, _ = deepseek_fake.structured(
         task="research_standard", system="s", user_content="u",
         schema_model=ResearchFindings,
     )
-    deep, _ = claude_fake.structured(
+    deep, _ = deepseek_fake.structured(
         task="research_deep", system="s", user_content="u",
         schema_model=ResearchFindings,
     )
-    tailor, _ = claude_fake.structured(
+    tailor, _ = deepseek_fake.structured(
         task="tailor", system="s", user_content="u", schema_model=TailorResult,
     )
     assert standard.mission
     assert deep.news and deep.sources
     assert tailor.resume.contact.name == "Jordan Rivera"
     assert tailor.cover_letter_md
-    assert len(claude_fake.calls) == 3
+    assert len(deepseek_fake.calls) == 3
 
 
-def test_fake_mode_missing_fixture_raises(claude_fake):
-    with pytest.raises(ClaudeError):
-        claude_fake.structured(
+def test_fake_mode_missing_fixture_raises(deepseek_fake):
+    with pytest.raises(DeepSeekError):
+        deepseek_fake.structured(
             task="does_not_exist", system="s", user_content="u",
             schema_model=ParsedPosting,
         )
 
 
-def test_make_claude_honors_fake_mode():
+def test_make_deepseek_honors_fake_mode():
     class FakeSettings:
         fake_mode = True
-        anthropic_api_key = None
+        deepseek_api_key = None
 
     class RealSettings:
         fake_mode = False
-        anthropic_api_key = "sk-test-123"
+        deepseek_api_key = "sk-test-123"
 
-    fake_service = make_claude(FakeSettings())
+    fake_service = make_deepseek(FakeSettings())
     assert fake_service.fake_mode is True
     assert fake_service.fixtures_dir is not None
     assert (fake_service.fixtures_dir / "parse_posting.json").exists()
 
-    real_service = make_claude(RealSettings())
+    real_service = make_deepseek(RealSettings())
     assert real_service.fake_mode is False
     assert real_service.api_key == "sk-test-123"
     assert real_service.fixtures_dir == fake_service.fixtures_dir

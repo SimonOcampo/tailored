@@ -107,7 +107,7 @@ def test_template_renders_fixture_resume(template):
     assert "<style>" in html  # standalone: CSS inlined
     assert resume.contact.name in html
     for section in resume.sections:
-        assert section.title in html
+        assert ("Work History" if section.type == "experience" else section.title) in html
 
 
 # --- The body typeface must be set on the body ------------------------------
@@ -416,16 +416,11 @@ def test_the_meridian_identity_guard_reads_the_declarations_it_claims_to():
 # green, since the two partials carry the same facts in the same order.
 
 
-def test_plainwork_renders_through_the_block_flow_partial():
+def test_plainwork_uses_the_user_supplied_headless_layout():
     html = render_resume_html(_fixture_resume(), "plainwork")
-    assert 'class="item-head"' not in html, (
-        "plainwork/template.html includes the canonical _resume_body.html, whose "
-        "flex .item-head is the layout path this template exists to avoid."
-    )
-    assert 'class="primary"' in html, (
-        "plainwork renders no .primary at all; the include resolved to something "
-        "other than _resume_body_plain.html"
-    )
+    assert 'class="job-identity"' in html
+    assert "Education &amp; Certificates" in html
+    assert html.index('class="section section-education') < html.index('class="section section-experience')
 
 
 @pytest.mark.parametrize(

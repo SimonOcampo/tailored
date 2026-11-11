@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..schemas import ParsedPosting, ResearchFindings, UsageInfo
-from .claude import ClaudeService
+from .deepseek import DeepSeekService
 
 PARSE_POSTING_SYSTEM = """You are a job-posting analyst. You will receive the raw text of a single job posting. Extract a structured summary of it.
 
@@ -11,14 +11,14 @@ Rules:
 - company_domain: the company's primary website domain (bare domain like "acme.com" - no scheme, no path, no "www." prefix) if it appears in the posting or is unambiguous from the company name; otherwise null.
 - must_haves: hard requirements (skills, years of experience, credentials) the posting treats as mandatory.
 - nice_to_haves: preferred or bonus qualifications.
-- keywords: the concrete skills, tools, technologies, and domain terms the posting emphasizes - the vocabulary an applicant-tracking system would scan for.
+- keywords: prioritize concrete qualifications from Requirements, Qualifications, Must Have, Need to Have, What We Are Looking For, and equivalent sections. Include concrete skills, tools, technologies, and domain terms emphasized there, then relevant duties. Exclude benefits, EEO text, salary, and generic company marketing. Distinguish mandatory from preferred qualifications in must_haves/nice_to_haves.
 - seniority: one short phrase (for example "senior", "mid-level", "staff", "entry-level"), or null if unclear.
 - tone: one short phrase describing the posting's voice (for example "formal corporate", "casual startup", "mission-driven"), or null if unclear.
 - Use only information present in the posting text. Never invent requirements."""
 
 
-def parse_posting(raw_text: str, claude: ClaudeService) -> tuple[ParsedPosting, UsageInfo]:
-    parsed, usage = claude.structured(
+def parse_posting(raw_text: str, deepseek: DeepSeekService) -> tuple[ParsedPosting, UsageInfo]:
+    parsed, usage = deepseek.structured(
         task="parse_posting",
         system=PARSE_POSTING_SYSTEM,
         user_content=raw_text,
@@ -64,7 +64,7 @@ def _research_user_content(parsed: ParsedPosting) -> str:
 
 
 def research_company(
-    parsed: ParsedPosting, depth: str, claude: ClaudeService
+    parsed: ParsedPosting, depth: str, deepseek: DeepSeekService
 ) -> tuple[ResearchFindings, UsageInfo] | None:
     if depth == "quick":
         return None
@@ -72,7 +72,7 @@ def research_company(
         tool: dict = {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 8}
         if parsed.company_domain:
             tool["allowed_domains"] = [parsed.company_domain]
-        findings, usage = claude.structured(
+        findings, usage = deepseek.structured(
             task="research_standard",
             system=RESEARCH_STANDARD_SYSTEM,
             user_content=_research_user_content(parsed),
@@ -86,7 +86,7 @@ def research_company(
             {"type": "web_search_20260209", "name": "web_search", "max_uses": 8},
             {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 8},
         ]
-        findings, usage = claude.structured(
+        findings, usage = deepseek.structured(
             task="research_deep",
             system=RESEARCH_DEEP_SYSTEM,
             user_content=_research_user_content(parsed),

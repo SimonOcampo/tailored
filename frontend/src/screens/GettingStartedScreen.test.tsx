@@ -73,11 +73,11 @@ describe("GettingStartedScreen", () => {
     expect(screen.getByRole("link", { name: "templates" })).toHaveAttribute("href", "/templates");
   });
 
-  it("points users without an Anthropic account at the console", async () => {
+  it("points users without an DeepSeek account at the console", async () => {
     vi.mocked(api.getSettings).mockResolvedValue(settings({ api_key_set: false }));
     renderScreen({ people: [], personId: null });
-    const link = await screen.findByRole("link", { name: /anthropic console/i });
-    expect(link).toHaveAttribute("href", "https://console.anthropic.com/");
+    const link = await screen.findByRole("link", { name: /deepseek console/i });
+    expect(link).toHaveAttribute("href", "https://platform.deepseek.com/");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noreferrer");
   });

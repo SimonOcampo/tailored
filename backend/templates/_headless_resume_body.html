@@ -1,0 +1,82 @@
+{# Headless Word-template adaptation. Edit paths retain original JSON indexes. #}
+{%- import "_edit.html" as ed with context %}
+<header class="resume-header">
+  <h1 class="name"{{ ed.locked() }}>{{ resume.contact.name }}</h1>
+  {% if resume.contact.authorization_note %}<p class="authorization-line"{{ ed.locked() }}>{{ resume.contact.authorization_note }}</p>{% endif %}
+  <p class="headline"{{ ed.editable('headline') }}>{{ resume.headline }}</p>
+  <p class="contact-line"{{ ed.locked() }}>{% for link in contact_links %}{% if not loop.first %} | {% endif %}<a href="{{ link.url }}" target="_blank" rel="noopener noreferrer">{{ link.label }}</a>{% endfor %}</p>
+  {% if resume.contact.location %}<p class="contact-line location-line"{{ ed.locked() }}>{{ resume.contact.location }}</p>{% endif %}
+  {% if resume.summary or edit_mode %}<p class="summary"{{ ed.editable('summary') }}>{{ resume.summary }}</p>{% endif %}
+</header>
+
+{% for section_index in section_order %}{% set section = resume.sections[section_index] %}{% set spath = 'sections.' ~ section_index %}
+<section class="section section-{{ section.type }}{% if section.type == 'certifications' and has_education %} continued-education{% endif %}"{{ ed.node(spath) }}>
+  {% set section_label = ('Education & Certificates' if has_certifications else 'Education') if section.type == 'education' else ('Certificates' if section.type == 'certifications' and not has_education else ('Work History' if section.type == 'experience' else section.title)) %}
+  <h2 class="section-title">{{ ed.field(section_label, spath ~ '.title') }}{{ ed.remove(spath, 'section') }}</h2>
+
+  {% if section.type == "experience" %}
+    {% for item in section.items %}{% set ipath = spath ~ '.items.' ~ loop.index0 %}
+    <div class="item"{{ ed.node(ipath) }}>{{ ed.remove(ipath, 'entry') }}
+      <div class="item-head">
+        <span class="job-identity"><span class="primary"{{ ed.locked() }}>{{ item.role }}</span> at <span class="secondary"{{ ed.locked() }}>{{ item.company }}</span>{% if item.location %}, <span{{ ed.locked() }}>{{ item.location }}</span>{% endif %}</span>
+        <span class="meta"{{ ed.locked() }}>{{ item.start | resume_date }} to {{ item.end | resume_date if item.end else "Current" }}</span>
+      </div>
+      {% if item.bullets %}
+      <ul class="bullets">
+        {% for bullet in item.bullets %}<li>{{ ed.line(bullet, ipath ~ '.bullets.' ~ loop.index0, 'bullet') }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+  {% elif section.type == "projects" %}
+    {% for item in section.items %}{% set ipath = spath ~ '.items.' ~ loop.index0 %}
+    <div class="item"{{ ed.node(ipath) }}>{{ ed.remove(ipath, 'entry') }}
+      <div class="item-head">
+        <span class="primary"{{ ed.locked() }}>{{ item.name }}</span>
+        {% if item.url %}{% if safe_web_url(item.url) %}<a class="meta project-link" href="{{ item.url }}" target="_blank" rel="noopener noreferrer"{{ ed.locked() }}>{{ display_url(item.url) }}</a>{% else %}<span class="meta project-link"{{ ed.locked() }}>{{ item.url }}</span>{% endif %}{% endif %}
+      </div>
+      {% if item.bullets %}
+      <ul class="bullets">
+        {% for bullet in item.bullets %}<li>{{ ed.line(bullet, ipath ~ '.bullets.' ~ loop.index0, 'bullet') }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+  {% elif section.type == "skills" %}
+    {% for group in section.groups %}{% set gpath = spath ~ '.groups.' ~ loop.index0 %}
+    <div class="item skill-group"{{ ed.node(gpath) }}>
+      <span class="skill-label">{{ ed.field(group.label, gpath ~ '.label') }}:</span>
+      <span class="skill-items">{{ ed.field(group.items | join(", "), gpath ~ '.items') }}</span>{{ ed.remove(gpath, 'group') }}
+    </div>
+    {% endfor %}
+
+  {% elif section.type == "education" %}
+    {% for item in section.items %}{% set ipath = spath ~ '.items.' ~ loop.index0 %}
+    <div class="item"{{ ed.node(ipath) }}>{{ ed.remove(ipath, 'entry') }}
+      <div class="item-head">
+        <span class="education-identity"><span class="primary"{{ ed.locked() }}>{{ item.credential }}</span>, <span class="secondary"{{ ed.locked() }}>{{ item.institution }}</span>{% if item.detail or edit_mode %}<span class="education-detail">{% if item.detail %} | {% endif %}<span{{ ed.editable(ipath ~ '.detail') }}>{{ item.detail or "" }}</span></span>{% endif %}</span>
+        {% if item.year %}<span class="meta"{{ ed.locked() }}>{{ item.year }}</span>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+
+  {% elif section.type == "certifications" %}
+    {% for item in section.items %}{% set ipath = spath ~ '.items.' ~ loop.index0 %}
+    <div class="item"{{ ed.node(ipath) }}>{{ ed.remove(ipath, 'entry') }}
+      <div class="item-head">
+        <span class="primary"{{ ed.locked() }}>{{ item.name }}</span>
+        {% if item.issuer %}<span class="secondary"{{ ed.locked() }}>{{ item.issuer }}</span>{% endif %}
+        {% if item.year %}<span class="meta"{{ ed.locked() }}>{{ item.year }}</span>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+
+  {% elif section.type == "extras" %}
+    <ul class="bullets extras">
+      {% for item in section.items %}<li>{{ ed.line(item, spath ~ '.items.' ~ loop.index0, 'item') }}</li>{% endfor %}
+    </ul>
+  {% endif %}
+</section>
+{% endfor %}

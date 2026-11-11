@@ -97,7 +97,7 @@ def test_the_next_build_reads_only_what_remains(client, monkeypatch):
     client.delete(f"/api/profiles/{pid}/documents/{doomed}")
     seen = {}
 
-    def fake_build(docs, claude):
+    def fake_build(docs, deepseek):
         seen["docs"] = list(docs)
         return MasterProfile(), Contact(name="Ada"), UsageInfo()
 

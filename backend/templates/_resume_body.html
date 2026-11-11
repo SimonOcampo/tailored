@@ -9,7 +9,7 @@
   <p class="headline"{{ ed.editable('headline') }}>{{ resume.headline }}</p>
   <p class="contact-line"{{ ed.locked() }}>
     {{ [resume.contact.email, resume.contact.phone, resume.contact.location] | select | join(" · ") }}
-    {%- for link in resume.contact.links %} · {{ link.label }}: {{ link.url }}{% endfor %}
+    {%- for link in resume.contact.links %} · {% if compact_contact | default(false) %}<a href="{{ link.url }}">{{ link.url.removeprefix('https://').removeprefix('http://').removeprefix('www.').rstrip('/') }}</a>{% else %}{{ link.label }}: {{ link.url }}{% endif %}{% endfor %}
   </p>
   {% if resume.summary or edit_mode %}<p class="summary"{{ ed.editable('summary') }}>{{ resume.summary }}</p>{% endif %}
 </header>

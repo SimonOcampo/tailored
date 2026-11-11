@@ -1,7 +1,7 @@
 """Demo-mode seeding: one profile plus one fully processed application.
 
 Runs only when settings.fake_mode is on and the database has no Profile rows.
-Fully offline: the injected fake ClaudeService serves canned fixtures, and PDF
+Fully offline: the injected fake DeepSeekService serves canned fixtures, and PDF
 rendering falls back to a placeholder file when Chromium is unavailable, so the
 demo never hard-fails without `playwright install chromium`.
 """
@@ -15,7 +15,7 @@ from sqlmodel import select
 from .db import session_scope
 from .models import Application, Job, Profile, set_contact, set_master_profile
 from .schemas import Contact, MasterProfile
-from .services import claude as claude_service
+from .services import deepseek as deepseek_service
 from .services import pipeline, render
 
 DEMO_DIR = Path(__file__).resolve().parent / "fixtures" / "demo"
@@ -23,7 +23,7 @@ DEMO_JOB_URL = "https://careers.northwindlabs.example/jobs/senior-software-engin
 PDF_PLACEHOLDER = b"%PDF-1.4\n% demo placeholder"
 
 
-def seed_demo(engine, claude, data_dir) -> None:
+def seed_demo(engine, deepseek, data_dir) -> None:
     """Seed the demo profile + application and run the pipeline to 'ready'."""
     Path(data_dir).mkdir(parents=True, exist_ok=True)
     with session_scope(engine) as session:
@@ -60,15 +60,15 @@ def seed_demo(engine, claude, data_dir) -> None:
         # this point leaves no rows at all, so the "any Profile exists" gate
         # above can never see a half-seeded demo.
 
-    _run_pipeline_with_fake_claude(application_id, engine, claude)
+    _run_pipeline_with_fake_deepseek(application_id, engine, deepseek)
 
 
-def _run_pipeline_with_fake_claude(application_id: int, engine, claude) -> None:
-    """Run process_application with the injected ClaudeService and a guarded render_pdf.
+def _run_pipeline_with_fake_deepseek(application_id: int, engine, deepseek) -> None:
+    """Run process_application with the injected DeepSeekService and a guarded render_pdf.
 
     - render.render_pdf is temporarily wrapped: any exception (missing Chromium)
       writes PDF_PLACEHOLDER bytes instead of failing the demo.
-    - make_claude is temporarily overridden (on the claude service module and, if
+    - make_deepseek is temporarily overridden (on the deepseek service module and, if
       pipeline bound it by from-import, on the pipeline module) so the pipeline
       uses the injected fake service regardless of env.
     """
@@ -82,10 +82,10 @@ def _run_pipeline_with_fake_claude(application_id: int, engine, claude) -> None:
             Path(out_path).write_bytes(PDF_PLACEHOLDER)
 
     patched_factories = []
-    for module in (claude_service, pipeline):
-        if hasattr(module, "make_claude"):
-            patched_factories.append((module, module.make_claude))
-            setattr(module, "make_claude", lambda _settings, _c=claude: _c)
+    for module in (deepseek_service, pipeline):
+        if hasattr(module, "make_deepseek"):
+            patched_factories.append((module, module.make_deepseek))
+            setattr(module, "make_deepseek", lambda _settings, _c=deepseek: _c)
 
     render.render_pdf = guarded_render_pdf
     try:
@@ -93,4 +93,4 @@ def _run_pipeline_with_fake_claude(application_id: int, engine, claude) -> None:
     finally:
         render.render_pdf = original_render_pdf
         for module, original in patched_factories:
-            setattr(module, "make_claude", original)
+            setattr(module, "make_deepseek", original)

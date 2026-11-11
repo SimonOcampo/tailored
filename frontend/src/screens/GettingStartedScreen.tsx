@@ -6,7 +6,7 @@ import type { SettingsShape } from "../types";
 import CopyButton from "../components/CopyButton";
 import McpSetup from "../components/McpSetup";
 
-const ENV_LINE = "ANTHROPIC_API_KEY=sk-ant-...";
+const ENV_LINE = "DEEPSEEK_API_KEY=sk-...";
 
 export default function GettingStartedScreen() {
   const { person, loading: peopleLoading, error: peopleError, labelFor } = usePerson();
@@ -63,7 +63,7 @@ export default function GettingStartedScreen() {
               {!hasProfile && <Link to="/profiles">Create your profile →</Link>}
             </p>
             <p>
-              Anthropic API key:{" "}
+              DeepSeek API key:{" "}
               {settings?.api_key_set ? (
                 <span className="pill pill-ok">set</span>
               ) : (
@@ -84,14 +84,14 @@ export default function GettingStartedScreen() {
         <div className="card-title">Choose how to power Tailored</div>
 
         <div className="field">
-          <label className="field-label">Use your Anthropic API key</label>
+          <label className="field-label">Use your DeepSeek API key</label>
           <p className="muted">
-            Paste job URLs and walk away. ~$0.15–$3 per job by research depth.
+            Paste a job description or URL. Usage and estimated cost are tracked per application.
           </p>
           <p className="muted">
             No key yet? Create one in the{" "}
-            <a href="https://console.anthropic.com/" target="_blank" rel="noreferrer">
-              Anthropic Console →
+            <a href="https://platform.deepseek.com/" target="_blank" rel="noreferrer">
+              DeepSeek Console →
             </a>{" "}
             (sign in, then API keys → Create key).
           </p>

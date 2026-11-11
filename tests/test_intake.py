@@ -63,12 +63,12 @@ def test_intake_result_shape():
     assert set(IntakeResult.model_fields) == {"contact", "master_profile"}
 
 
-def test_build_master_profile_returns_fixture_backed_profile(claude_fake):
+def test_build_master_profile_returns_fixture_backed_profile(deepseek_fake):
     docs = [
         "JORDAN RIVERA\nSenior Software Engineer\n...full resume text...",
         "Extra career notes",
     ]
-    profile, contact, usage = build_master_profile(docs, claude_fake)
+    profile, contact, usage = build_master_profile(docs, deepseek_fake)
     assert isinstance(profile, MasterProfile)
     assert isinstance(contact, Contact)
     assert contact.name == "Jordan Rivera"
@@ -81,9 +81,9 @@ def test_build_master_profile_returns_fixture_backed_profile(claude_fake):
     assert usage == UsageInfo(input_tokens=0, output_tokens=0, cost_usd=0.0)
 
 
-def test_build_master_profile_records_intake_call(claude_fake):
-    build_master_profile(["Doc A body", "Doc B body"], claude_fake)
-    call = claude_fake.calls[-1]
+def test_build_master_profile_records_intake_call(deepseek_fake):
+    build_master_profile(["Doc A body", "Doc B body"], deepseek_fake)
+    call = deepseek_fake.calls[-1]
     assert call["task"] == "intake"
     assert call["schema_model_name"] == "IntakeResult"
     assert call["tools"] is None

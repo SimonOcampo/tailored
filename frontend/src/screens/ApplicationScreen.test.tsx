@@ -707,7 +707,8 @@ describe("ApplicationScreen inline editing", () => {
     renderAt();
     const frame = (await screen.findByTitle("Resume preview")) as HTMLIFrameElement;
     expect(frame.getAttribute("src")).toBe("/api/applications/1/preview");
-    expect(frame.getAttribute("sandbox")).toBe("");
+      expect(frame.getAttribute("sandbox")).toBe("allow-popups allow-popups-to-escape-sandbox");
+      expect(frame.getAttribute("sandbox")).not.toContain("allow-scripts");
     expect(api.fetchEditPreview).not.toHaveBeenCalled();
   });
 

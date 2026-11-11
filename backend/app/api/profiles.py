@@ -22,7 +22,7 @@ from ..models import (
 )
 from ..schemas import Contact, MasterProfile
 from ..services import intake, removal
-from ..services.claude import ClaudeError
+from ..services.deepseek import DeepSeekError
 from ..services.inbox import inbox_url
 
 router = APIRouter()
@@ -38,6 +38,7 @@ class ProfileUpdate(BaseModel):
     contact: Optional[Contact] = None
     master_profile: Optional[MasterProfile] = None
     voice_notes: Optional[str] = None
+    one_page_resume: Optional[bool] = None
 
 
 def _has_master_profile(profile: Profile) -> bool:
@@ -91,6 +92,7 @@ def profile_detail(session: Session, profile: Profile) -> dict[str, Any]:
         "contact": contact.model_dump(),
         "master_profile": get_master_profile(profile).model_dump(),
         "voice_notes": profile.voice_notes,
+        "one_page_resume": profile.one_page_resume,
         "created_at": profile.created_at.replace(tzinfo=timezone.utc).isoformat(),
         "inbox_url": inbox_url(contact.email),
         "application_count": application_count,
@@ -98,26 +100,6 @@ def profile_detail(session: Session, profile: Profile) -> dict[str, Any]:
             {"id": d.id, "filename": d.filename, "kind": d.kind} for d in docs
         ],
     }
-
-
-def _blank(value: Optional[str]) -> bool:
-    return not (value or "").strip()
-
-
-def _merge_contact(existing: Contact, found: Contact) -> Contact:
-    """The person's contact, with only its empty fields filled from `found`.
-
-    Build reads whatever documents were uploaded, and an old resume carries an
-    old email and phone. What the person already has (typed on the Profiles
-    screen, or kept from an earlier Build) wins; the documents only fill gaps.
-    """
-    return Contact(
-        name=found.name if _blank(existing.name) else existing.name,
-        email=found.email if _blank(existing.email) else existing.email,
-        phone=found.phone if _blank(existing.phone) else existing.phone,
-        location=found.location if _blank(existing.location) else existing.location,
-        links=existing.links if existing.links else found.links,
-    )
 
 
 def _get_profile_or_404(session: Session, profile_id: int) -> Profile:
@@ -169,6 +151,8 @@ def update_profile(
         set_master_profile(profile, body.master_profile)
     if body.voice_notes is not None:
         profile.voice_notes = body.voice_notes
+    if body.one_page_resume is not None:
+        profile.one_page_resume = body.one_page_resume
     profile.updated_at = _utcnow()
     session.add(profile)
     session.commit()
@@ -271,14 +255,14 @@ def build_profile(
         raise HTTPException(status_code=422, detail="upload at least one document first")
     try:
         master, contact, usage = intake.build_master_profile(
-            [d.text for d in docs], request.app.state.claude
+            [d.text for d in docs], request.app.state.deepseek
         )
-    except ClaudeError as exc:
+    except DeepSeekError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"profile build failed: {exc}")
     set_master_profile(profile, master)
-    set_contact(profile, _merge_contact(get_contact(profile), contact))
+    set_contact(profile, intake.merge_contact(get_contact(profile), contact))
     profile.updated_at = _utcnow()
     session.add(profile)
     session.commit()

@@ -181,12 +181,12 @@ def test_switching_template_with_no_stored_resume_is_422(client, seeded, engine)
 
 def test_switching_template_never_calls_claude(client, seeded, monkeypatch):
     """The whole point: a different template costs nothing."""
-    from backend.app.services import claude as claude_module
+    from backend.app.services import deepseek as deepseek_module
 
     def explode(*args, **kwargs):
         raise AssertionError("switching a template must not call Claude")
 
-    monkeypatch.setattr(claude_module.ClaudeService, "structured", explode)
+    monkeypatch.setattr(deepseek_module.DeepSeekService, "structured", explode)
     resp = client.patch(
         f"/api/applications/{seeded['application_id']}/template",
         json={"template": "ledger"},

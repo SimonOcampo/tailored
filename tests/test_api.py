@@ -14,7 +14,7 @@ from backend.app.main import create_app
 from backend.app.models import Application
 from backend.app.schemas import Contact, MasterProfile, MPExperience, TaggedBullet, UsageInfo
 from backend.app.services import intake, pipeline, render
-from backend.app.services.claude import ClaudeError
+from backend.app.services.deepseek import DeepSeekError
 
 CONTACT = {
     "name": "Avery Kim",
@@ -62,7 +62,7 @@ VALID_RESUME = {
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("TAILORED_FAKE", "1")
     monkeypatch.setenv("TAILORED_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     settings = Settings()
     engine = get_engine(tmp_path / "test.db")
     app = create_app(settings=settings, engine=engine)
@@ -95,6 +95,28 @@ def test_health(client):
     resp = client.get("/api/health")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
+
+
+def test_saved_resume_preferences_and_authorization_survive_unrelated_updates(client):
+    pid = make_profile(client)
+    note = "F-1 Student eligible for OPT; eligible for H-1B change of status. The $100,000 fee DOES NOT APPLY."
+    response = client.put(f"/api/profiles/{pid}", json={
+        "one_page_resume": True, "contact": {**CONTACT, "authorization_note": note}})
+    assert response.status_code == 200
+    assert response.json()["one_page_resume"] is True
+    client.put(f"/api/profiles/{pid}", json={"voice_notes": "Plain language"})
+    saved = client.get(f"/api/profiles/{pid}").json()
+    assert saved["one_page_resume"] is True
+    assert saved["contact"]["authorization_note"] == note
+
+
+def test_batch_requires_a_url_or_description_and_validates_before_creating(client):
+    pid = make_profile(client)
+    response = client.post("/api/applications/batch", json={"profile_id": pid,
+        "jobs": [{"url": "https://example.com/job"}, {"url": " ", "posting_text": " "}],
+        "generate": False})
+    assert response.status_code == 422
+    assert client.get(f"/api/applications?profile_id={pid}").json() == []
 
 
 def test_profile_crud(client):
@@ -174,7 +196,7 @@ def test_build_master_profile(client, monkeypatch):
     contact = Contact(name="Avery Kim", email="avery.kim@example.com")
     recorded = {}
 
-    def fake_build(docs, claude):
+    def fake_build(docs, deepseek):
         recorded["docs"] = list(docs)
         return mp, contact, UsageInfo(input_tokens=1000, output_tokens=500, cost_usd=0.0175)
 
@@ -192,8 +214,8 @@ def test_build_master_profile_claude_error_returns_502(client, monkeypatch):
     client.post(f"/api/profiles/{pid}/documents",
                 json={"filename": "resume.txt", "text": "Avery resume text"})
 
-    def fake_build(docs, claude):
-        raise ClaudeError("boom")
+    def fake_build(docs, deepseek):
+        raise DeepSeekError("boom")
 
     monkeypatch.setattr(intake, "build_master_profile", fake_build)
     resp = client.post(f"/api/profiles/{pid}/build")
@@ -333,6 +355,46 @@ def test_content_edit(client, monkeypatch):
     assert len(client.calls["process"]) + len(client.calls["regenerate"]) == before
 
 
+def test_content_edit_applies_owners_page_limit_and_saves_fitted_selection(client, monkeypatch):
+    pid = make_profile(client)
+    note = "Candidate-supplied authorization note."
+    client.put(f"/api/profiles/{pid}", json={"one_page_resume": True,
+        "contact": {**CONTACT, "authorization_note": note}})
+    app_id = make_application(client, pid)
+    def fit(resume, template, page_size, *, one_page):
+        assert one_page is True
+        assert resume.contact.authorization_note == note
+        fitted = resume.model_copy(deep=True)
+        fitted.sections = [s for s in fitted.sections if s.type != "skills"]
+        return fitted
+    def export(application_id, resume, *args, **kwargs):
+        assert not any(s.type == "skills" for s in resume.sections)
+        return Path(client.app.state.settings.data_dir) / "exports" / str(application_id)
+    monkeypatch.setattr(render, "prepare_resume", fit)
+    monkeypatch.setattr(render, "export_application", export)
+    response = client.put(f"/api/applications/{app_id}/content", json={"resume": VALID_RESUME})
+    assert response.status_code == 200
+    saved = client.get(f"/api/applications/{app_id}").json()["resume"]
+    assert not any(s["type"] == "skills" for s in saved["sections"])
+    assert saved["contact"]["authorization_note"] == note
+
+
+def test_overflowing_manual_edit_is_rejected_without_replacing_saved_resume(client, monkeypatch):
+    pid = make_profile(client)
+    app_id = make_application(client, pid)
+    monkeypatch.setattr(render, "export_application", lambda *args, **kwargs: Path(client.app.state.settings.data_dir) / "exports" / str(app_id))
+    first = client.put(f"/api/applications/{app_id}/content", json={"resume": VALID_RESUME}).json()
+    client.put(f"/api/profiles/{pid}", json={"one_page_resume": True})
+    def overflow(*args, **kwargs):
+        raise ValueError("The resume cannot fit one page.")
+    monkeypatch.setattr(render, "prepare_resume", overflow)
+    changed = copy.deepcopy(VALID_RESUME)
+    changed["summary"] = "An oversized manual edit."
+    response = client.put(f"/api/applications/{app_id}/content", json={"resume": changed})
+    assert response.status_code == 422
+    assert client.get(f"/api/applications/{app_id}").json()["resume"] == first["resume"]
+
+
 def test_preview(client, monkeypatch):
     pid = make_profile(client)
     app_id = make_application(client, pid)
@@ -354,7 +416,7 @@ def test_export_downloads(client):
     app_id = make_application(client, pid)
     # unknown kind -> 404
     assert client.get(
-        f"/api/applications/{app_id}/exports/resume.docx").status_code == 404
+        f"/api/applications/{app_id}/exports/resume.rtf").status_code == 404
     # known kind but not generated yet -> 404
     assert client.get(
         f"/api/applications/{app_id}/exports/resume.pdf").status_code == 404
@@ -365,13 +427,21 @@ def test_export_downloads(client):
     ok = client.get(f"/api/applications/{app_id}/exports/resume.txt")
     assert ok.status_code == 200
     assert ok.text == "AVERY KIM"
+    from backend.app.schemas import ResumeDoc
+    from backend.app.services.headless_docx import render_resume_docx
+
+    render_resume_docx(ResumeDoc.model_validate(VALID_RESUME), export_dir / "resume.docx")
+    word = client.get(f"/api/applications/{app_id}/exports/resume.docx")
+    assert word.status_code == 200
+    assert word.content == (export_dir / "resume.docx").read_bytes()
+    assert 'filename="resume.docx"' in word.headers["content-disposition"]
 
 
 def test_settings_round_trip(client):
     resp = client.get("/api/settings")
     assert resp.status_code == 200
     assert resp.json() == {
-        "api_key_set": False,      # ANTHROPIC_API_KEY deleted in the fixture
+        "api_key_set": False,      # DEEPSEEK_API_KEY deleted in the fixture
         "fake_mode": True,         # TAILORED_FAKE=1 in the fixture
         "default_template": "slate",
         "default_depth": "standard",

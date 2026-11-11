@@ -62,6 +62,7 @@ class Profile(SQLModel, table=True):
     # inferred from the user's uploaded documents, because explicit
     # instruction beats inference.
     voice_notes: str = ""
+    one_page_resume: bool = False
     # This person's own settings, a JSON object over PROFILE_SETTING_KEYS.
     # "{}" means every value comes from the app-wide data/settings.json. Read
     # it through services.person_settings.settings_for, which does the overlay.
@@ -114,6 +115,7 @@ class Application(SQLModel, table=True):
     resume_json: Optional[str] = None       # ResumeDoc
     cover_letter_md: Optional[str] = None
     tailoring_notes: Optional[str] = None
+    outreach_json: Optional[str] = None     # OutreachPlan; additive, no old data rewritten
     input_tokens: int = 0
     output_tokens: int = 0
     cost_usd: float = 0.0

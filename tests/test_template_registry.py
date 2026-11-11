@@ -45,7 +45,11 @@ def test_manifest_name_matches_its_directory():
 
 def test_every_manifest_declares_a_known_structure():
     for manifest in TEMPLATE_REGISTRY.values():
-        assert manifest.structure in ("experience-first", "projects-forward")
+        assert manifest.structure in (
+            "experience-first",
+            "projects-forward",
+            "education-first",
+        )
 
 
 def test_every_declared_font_file_exists_on_disk():

@@ -44,7 +44,7 @@ def _settings_payload(request: Request, profile: Profile | None = None) -> dict[
     else:
         user = settings_for(settings.data_dir, profile)
     return {
-        "api_key_set": bool(settings.anthropic_api_key),
+        "api_key_set": bool(settings.deepseek_api_key),
         "fake_mode": settings.fake_mode,
         "default_template": user.get("default_template", "slate"),
         "default_depth": user.get("default_depth", "standard"),

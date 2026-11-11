@@ -23,16 +23,16 @@ class Settings:
 
     def __init__(
         self,
-        anthropic_api_key: object = _UNSET,
+        deepseek_api_key: object = _UNSET,
         data_dir: Path | str | None = None,
         fake_mode: bool | None = None,
         host: str | None = None,
         port: int | None = None,
     ) -> None:
-        if anthropic_api_key is _UNSET:
-            self.anthropic_api_key: str | None = os.environ.get("ANTHROPIC_API_KEY") or None
+        if deepseek_api_key is _UNSET:
+            self.deepseek_api_key: str | None = os.environ.get("DEEPSEEK_API_KEY") or None
         else:
-            self.anthropic_api_key = anthropic_api_key  # type: ignore[assignment]
+            self.deepseek_api_key = deepseek_api_key  # type: ignore[assignment]
 
         if data_dir is not None:
             self.data_dir = Path(data_dir)

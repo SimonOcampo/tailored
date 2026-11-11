@@ -19,14 +19,14 @@ def _build_demo_settings(tmp_path, monkeypatch, render_pdf):
     """Shared env/settings/engine setup for demo-seeding tests.
 
     `render_pdf` is patched onto backend.app.services.render BEFORE the caller
-    builds the app/engine and runs seeding: demo._run_pipeline_with_fake_claude
+    builds the app/engine and runs seeding: demo._run_pipeline_with_fake_deepseek
     captures `render.render_pdf` at seed time (guarded_render_pdf wraps
     whatever is bound there), so the patch must land before create_app's
     lifespan (or seed_demo directly) executes.
     """
     monkeypatch.setenv("TAILORED_FAKE", "1")
     monkeypatch.setenv("TAILORED_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     # The pipeline may consult the cached settings accessor internally; make sure
     # it re-reads the env vars set above.
     if hasattr(config.get_settings, "cache_clear"):

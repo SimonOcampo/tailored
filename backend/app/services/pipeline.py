@@ -31,8 +31,8 @@ from ..schemas import (
     ResearchFindings,
     UsageInfo,
 )
-from . import fetcher, render
-from .claude import ClaudeError, ClaudeService, make_claude
+from . import fetcher, render, outreach
+from .deepseek import DeepSeekError, DeepSeekService, make_deepseek
 from .person_settings import settings_for
 from .research import parse_posting, research_company
 from .style import check_style
@@ -148,16 +148,16 @@ def _add_usage(app: Application, usage: UsageInfo) -> None:
 
 
 def _run_from_research(session: Session, app: Application, job: Job,
-                       claude: ClaudeService) -> None:
+                       deepseek: DeepSeekService) -> None:
     """Researching -> tailoring -> rendering -> ready (Job.raw_text is set)."""
     profile = session.get(Profile, app.profile_id)
     if profile is None:
-        raise ClaudeError(f"Profile {app.profile_id} not found")
+        raise DeepSeekError(f"Profile {app.profile_id} not found")
     master = get_master_profile(profile)
     contact = get_contact(profile)
 
     _set_status(session, app, "researching")
-    parsed, parse_usage = parse_posting(job.raw_text or "", claude)
+    parsed, parse_usage = parse_posting(job.raw_text or "", deepseek)
     set_parsed(job, parsed)
     _add_usage(app, parse_usage)
     session.add(job)
@@ -165,7 +165,7 @@ def _run_from_research(session: Session, app: Application, job: Job,
     session.commit()
 
     findings: ResearchFindings | None = None
-    research = research_company(parsed, job.depth, claude)
+    research = research_company(parsed, job.depth, deepseek)
     if research is not None:  # depth "quick" returns None: no brief row
         findings, research_usage = research
         brief = ResearchBrief(
@@ -182,7 +182,7 @@ def _run_from_research(session: Session, app: Application, job: Job,
         session.commit()
 
     _tailor_and_render(session, app, profile, master, contact, parsed, findings,
-                       claude, feedback=None)
+                       deepseek, feedback=None)
 
 
 def _style_retry_feedback(feedback: str | None, violations: list[str]) -> str:
@@ -219,7 +219,7 @@ def _tailor_and_render(session: Session, app: Application, profile: Profile,
                        master: MasterProfile, contact: Contact,
                        parsed: ParsedPosting,
                        findings: ResearchFindings | None,
-                       claude: ClaudeService, feedback: str | None) -> None:
+                       deepseek: DeepSeekService, feedback: str | None) -> None:
     _set_status(session, app, "tailoring")
 
     # One retry, never a loop. A second failure means something is wrong with
@@ -230,11 +230,16 @@ def _tailor_and_render(session: Session, app: Application, profile: Profile,
     # The profile is passed in rather than looked up again: both callers have
     # already fetched it and already raised a clear error if it was missing.
     voice_sample, voice_notes = _voice_for(session, profile)
+    if profile.one_page_resume:
+        limit = ("ONE PAGE MAXIMUM. Keep the strongest work-history and project evidence. "
+                 "Use concise bullets, select the most relevant projects, omit project descriptions, "
+                 "and include skills only when space remains. Preserve readable template body type.")
+        feedback = f"{feedback}\n\n{limit}" if feedback else limit
     attempt_feedback = feedback
     result = None
     for attempt in (0, 1):
         result, usage = tailor_application(
-            master, contact, parsed, findings, app.template, claude,
+            master, contact, parsed, findings, app.template, deepseek,
             feedback=attempt_feedback,
             voice_sample=voice_sample, voice_notes=voice_notes,
         )
@@ -247,7 +252,7 @@ def _tailor_and_render(session: Session, app: Application, profile: Profile,
 
         violations = verify_truthfulness(result.resume, master)
         if violations:
-            raise ClaudeError(
+            raise DeepSeekError(
                 "Truthfulness check failed: " + "; ".join(violations)
             )
 
@@ -255,11 +260,16 @@ def _tailor_and_render(session: Session, app: Application, profile: Profile,
         if not style_violations:
             break
         if attempt == 1:
-            raise ClaudeError(
+            raise DeepSeekError(
                 "Style check failed: " + "; ".join(style_violations)
             )
         attempt_feedback = _style_retry_feedback(feedback, style_violations)
 
+    settings = get_settings()
+    page_size = settings_for(settings.data_dir, profile).get("page_size", "Letter")
+    result.resume.contact.authorization_note = contact.authorization_note
+    result.resume = render.prepare_resume(result.resume, app.template, page_size,
+                                          one_page=profile.one_page_resume)
     app.resume_json = result.resume.model_dump_json()
     app.cover_letter_md = result.cover_letter_md
     app.tailoring_notes = result.tailoring_notes
@@ -289,6 +299,27 @@ def _tailor_and_render(session: Session, app: Application, profile: Profile,
     session.add(app)
     session.commit()
 
+    # Contact discovery is best-effort. A search or source outage must never
+    # discard a successfully generated resume. Record paid usage immediately.
+    def record_outreach_usage(usage):
+        _add_usage(app, usage)
+        session.add(app)
+        session.commit()
+
+    try:
+        posting = session.get(Job, app.job_id)
+        plan = outreach.build_outreach(parsed, master, result.resume, deepseek,
+                                       record_outreach_usage, profile.voice_notes,
+                                       posting_text=posting.raw_text or "" if posting else "")
+    except Exception as exc:
+        from ..schemas import OutreachPlan
+        plan = OutreachPlan(status="unavailable", notes=(
+            "Contact research or drafting was unavailable. Your resume was generated successfully. "
+            + str(exc)[:300]))
+    app.outreach_json = plan.model_dump_json()
+    session.add(app)
+    session.commit()
+
     # The one place status drives stage: finishing generation moves a parked
     # job to drafted. Any other stage is the user's and is left alone.
     if app.stage == "saved":
@@ -301,7 +332,7 @@ def _tailor_and_render(session: Session, app: Application, profile: Profile,
 
 @_registers_live_run
 def process_application(app_id: int, engine=None,
-                        claude: ClaudeService | None = None) -> None:
+                        deepseek: DeepSeekService | None = None) -> None:
     """Run the full stage machine for one application (synchronous).
 
     queued -> fetching -> researching -> tailoring -> rendering -> ready.
@@ -309,7 +340,7 @@ def process_application(app_id: int, engine=None,
     any exception lands the application in status="error".
     """
     engine = engine if engine is not None else get_engine()
-    claude = claude if claude is not None else make_claude(get_settings())
+    deepseek = deepseek if deepseek is not None else make_deepseek(get_settings())
     with Session(engine) as session:
         app = session.get(Application, app_id)
         if app is None:
@@ -317,7 +348,7 @@ def process_application(app_id: int, engine=None,
         try:
             job = session.get(Job, app.job_id)
             if job is None:
-                raise ClaudeError(f"Job {app.job_id} not found")
+                raise DeepSeekError(f"Job {app.job_id} not found")
             if not job.raw_text:  # skip fetch when text was pasted up front
                 _set_status(session, app, "fetching")
                 fetch_result = fetcher.fetch_posting(job.url)
@@ -331,17 +362,17 @@ def process_application(app_id: int, engine=None,
                 job.fetch_status = "fetched"
                 session.add(job)
                 session.commit()
-            _run_from_research(session, app, job, claude)
+            _run_from_research(session, app, job, deepseek)
         except Exception as exc:  # noqa: BLE001 - every failure is visible state
             _mark_error(session, app, str(exc))
 
 
 @_registers_live_run
 def resume_after_paste(app_id: int, text: str, engine=None,
-                       claude: ClaudeService | None = None) -> None:
+                       deepseek: DeepSeekService | None = None) -> None:
     """User pasted the posting text: store it and continue from researching."""
     engine = engine if engine is not None else get_engine()
-    claude = claude if claude is not None else make_claude(get_settings())
+    deepseek = deepseek if deepseek is not None else make_deepseek(get_settings())
     with Session(engine) as session:
         app = session.get(Application, app_id)
         if app is None:
@@ -349,22 +380,22 @@ def resume_after_paste(app_id: int, text: str, engine=None,
         try:
             job = session.get(Job, app.job_id)
             if job is None:
-                raise ClaudeError(f"Job {app.job_id} not found")
+                raise DeepSeekError(f"Job {app.job_id} not found")
             job.raw_text = text
             job.fetch_status = "pasted"
             session.add(job)
             session.commit()
-            _run_from_research(session, app, job, claude)
+            _run_from_research(session, app, job, deepseek)
         except Exception as exc:  # noqa: BLE001
             _mark_error(session, app, str(exc))
 
 
 @_registers_live_run
 def regenerate_application(app_id: int, feedback: str, engine=None,
-                           claude: ClaudeService | None = None) -> None:
+                           deepseek: DeepSeekService | None = None) -> None:
     """Re-tailor with user feedback: version += 1, new snapshot, re-render."""
     engine = engine if engine is not None else get_engine()
-    claude = claude if claude is not None else make_claude(get_settings())
+    deepseek = deepseek if deepseek is not None else make_deepseek(get_settings())
     with Session(engine) as session:
         app = session.get(Application, app_id)
         if app is None:
@@ -373,10 +404,10 @@ def regenerate_application(app_id: int, feedback: str, engine=None,
             job = session.get(Job, app.job_id)
             profile = session.get(Profile, app.profile_id)
             if job is None or profile is None:
-                raise ClaudeError("Application is missing its job or profile row")
+                raise DeepSeekError("Application is missing its job or profile row")
             parsed = get_parsed(job)
             if parsed is None:
-                raise ClaudeError(
+                raise DeepSeekError(
                     "Cannot regenerate before the posting has been parsed"
                 )
             master = get_master_profile(profile)
@@ -394,6 +425,6 @@ def regenerate_application(app_id: int, feedback: str, engine=None,
             session.commit()
             session.refresh(app)
             _tailor_and_render(session, app, profile, master, contact, parsed,
-                               findings, claude, feedback=feedback)
+                               findings, deepseek, feedback=feedback)
         except Exception as exc:  # noqa: BLE001
             _mark_error(session, app, str(exc))

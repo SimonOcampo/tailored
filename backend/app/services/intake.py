@@ -9,12 +9,27 @@ import pypdf
 from pydantic import BaseModel
 
 from ..schemas import Contact, MasterProfile, UsageInfo
-from .claude import ClaudeService
+from .deepseek import DeepSeekService
 
 
 class IntakeResult(BaseModel):
     contact: Contact
     master_profile: MasterProfile
+
+
+def merge_contact(existing: Contact, found: Contact) -> Contact:
+    """Keep already-entered contact fields; use source documents only for gaps."""
+    def blank(value: str | None) -> bool:
+        return not (value or "").strip()
+
+    return Contact(
+        name=found.name if blank(existing.name) else existing.name,
+        email=found.email if blank(existing.email) else existing.email,
+        phone=found.phone if blank(existing.phone) else existing.phone,
+        location=found.location if blank(existing.location) else existing.location,
+        links=existing.links if existing.links else found.links,
+        authorization_note=existing.authorization_note or found.authorization_note,
+    )
 
 
 INTAKE_SYSTEM = """You are an expert resume-intake analyst. You will receive the full text of one or more documents a person has provided about their career (resumes, CVs, notes, bios).
@@ -59,10 +74,10 @@ def _join_docs(docs: list[str]) -> str:
 
 
 def build_master_profile(
-    docs: list[str], claude: ClaudeService
+    docs: list[str], deepseek: DeepSeekService
 ) -> tuple[MasterProfile, Contact, UsageInfo]:
     """One structured call (task='intake') turning raw document texts into a master profile."""
-    result, usage = claude.structured(
+    result, usage = deepseek.structured(
         task="intake",
         system=INTAKE_SYSTEM,
         user_content=_join_docs(docs),

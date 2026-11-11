@@ -22,7 +22,7 @@ from sqlmodel import Session
 
 from backend.app.db import get_engine, init_db
 from backend.app.models import Profile, set_contact, set_master_profile
-from backend.app.services.claude import ClaudeService
+from backend.app.services.deepseek import DeepSeekService
 from backend.app.services.intake import IntakeResult
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -33,6 +33,8 @@ EXPECTED_TOOLS = {
     "get_workflow_guide",
     "list_profiles",
     "get_master_profile",
+    "get_profile_documents",
+    "save_built_master_profile",
     "add_profile_evidence",
     "list_templates",
     "create_application",
@@ -44,6 +46,7 @@ EXPECTED_TOOLS = {
     "save_tailored_resume",
     "set_application_template",
     "get_application",
+    "save_outreach",
 }
 
 POSTING_TEXT = (
@@ -119,8 +122,8 @@ def _fixture(name: str) -> dict:
 
 def _seed_profile(data_dir: Path) -> int:
     """Pre-create <data_dir>/tailored.db with one profile from the intake fixture."""
-    claude = ClaudeService(fake_mode=True, fixtures_dir=FIXTURES_DIR)
-    intake, _usage = claude.structured(
+    deepseek = DeepSeekService(fake_mode=True, fixtures_dir=FIXTURES_DIR)
+    intake, _usage = deepseek.structured(
         task="intake", system="seed", user_content="seed", schema_model=IntakeResult
     )
     engine = get_engine(data_dir / "tailored.db")

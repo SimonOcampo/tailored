@@ -24,7 +24,7 @@ def test_setup_returns_running_interpreter_and_command(client):
     expected_command = f'claude mcp add tailored -- "{sys.executable}" "{mcp_server_path}"'
     assert body["mcp_command"] == expected_command
     assert body["platform"] in ("windows", "posix")
-    assert body["env_line"] == "ANTHROPIC_API_KEY=sk-ant-..."
+    assert body["env_line"] == "DEEPSEEK_API_KEY=sk-..."
     assert body["workflow_guide_tool"] == "get_workflow_guide"
     assert isinstance(body["mcp_server_exists"], bool)
 
@@ -32,7 +32,7 @@ def test_setup_returns_running_interpreter_and_command(client):
 def test_setup_never_leaks_api_key_from_constructor(tmp_path):
     secret = "sk-ant-SECRET-should-not-appear-0000"
     settings = Settings(
-        anthropic_api_key=secret,
+        deepseek_api_key=secret,
         data_dir=tmp_path,
         fake_mode=False,
         host="127.0.0.1",
@@ -49,14 +49,14 @@ def test_setup_never_leaks_api_key_from_constructor(tmp_path):
 def test_setup_never_leaks_api_key_from_environment(tmp_path, monkeypatch):
     """Guard the production key path: the env var, not the constructor kwarg."""
     secret = "sk-ant-SECRET-should-not-appear-1111"
-    monkeypatch.setenv("ANTHROPIC_API_KEY", secret)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", secret)
     settings = Settings(
         data_dir=tmp_path,
         fake_mode=False,
         host="127.0.0.1",
         port=8547,
     )
-    assert settings.anthropic_api_key == secret  # sanity: env path is actually wired up
+    assert settings.deepseek_api_key == secret  # sanity: env path is actually wired up
     engine = get_engine(tmp_path / "leak_env.db")
     init_db(engine)
     app = create_app(settings=settings, engine=engine)

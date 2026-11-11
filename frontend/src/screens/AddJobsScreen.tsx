@@ -24,6 +24,9 @@ export default function AddJobsScreen() {
   const [apiKeySet, setApiKeySet] = useState(true);
   const [fakeMode, setFakeMode] = useState(false);
   const [text, setText] = useState("");
+  const [inputMode, setInputMode] = useState<"urls" | "description">("urls");
+  const [description, setDescription] = useState("");
+  const [postingUrl, setPostingUrl] = useState("");
   const [generate, setGenerate] = useState(true);
   const [overrides, setOverrides] = useState<Record<number, RowOverride>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -68,26 +71,30 @@ export default function AddJobsScreen() {
         .filter((line) => line.length > 0),
     [text]
   );
+  const entries = inputMode === "description"
+    ? (description.trim() ? [postingUrl.trim() || "Pasted job description"] : [])
+    : urls;
 
   function setOverride(idx: number, patch: RowOverride) {
     setOverrides((o) => ({ ...o, [idx]: { ...o[idx], ...patch } }));
   }
 
   async function handleSubmit() {
-    if (person === null || !settingsReady || urls.length === 0) return;
+    if (person === null || !settingsReady || entries.length === 0) return;
     // Captured at click: the jobs belong to the person shown when Submit was
     // pressed, even if the picker changes while the request is in flight.
     const profileId = person.id;
     setSubmitting(true);
     setError(null);
-    const jobs: JobRequest[] = urls.map((url, i) => ({
-      url,
+    const jobs: JobRequest[] = entries.map((url, i) => ({
+      url: inputMode === "description" ? postingUrl.trim() : url,
+      ...(inputMode === "description" ? { posting_text: description.trim() } : {}),
       depth: overrides[i]?.depth ?? defaultDepth,
       template: overrides[i]?.template ?? defaultTemplate,
     }));
     try {
-      await createApplications(profileId, jobs, defaultDepth, defaultTemplate, generate);
-      navigate("/");
+      const created = await createApplications(profileId, jobs, defaultDepth, defaultTemplate, generate);
+      navigate(created.length === 1 ? `/applications/${created[0].id}` : "/");
     } catch (err) {
       setError(String(err));
       setSubmitting(false);
@@ -146,36 +153,59 @@ export default function AddJobsScreen() {
           </div>
         </div>
 
+        <p className="muted">Resumes use your Headless template. The template selector controls cover-letter style.</p>
         <div className="field">
-          <label className="field-label">Job posting URLs — one per line</label>
+          <label className="field-label" htmlFor="job-input-mode">Job input</label>
+          <select id="job-input-mode" className="select" value={inputMode}
+            onChange={(e) => setInputMode(e.target.value as "urls" | "description")}>
+            <option value="urls">Job URLs</option>
+            <option value="description">Paste job description</option>
+          </select>
+        </div>
+        {inputMode === "urls" ? <div className="field">
+          <label className="field-label" htmlFor="job-urls">Job posting URLs — one per line</label>
           <textarea
+            id="job-urls"
             className="textarea"
             placeholder="https://..."
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
-        </div>
+        </div> : <>
+          <div className="field">
+            <label className="field-label" htmlFor="job-description">Job description</label>
+            <textarea id="job-description" className="textarea" rows={12} maxLength={200000}
+              placeholder="Paste the full job description, including company and qualifications."
+              value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+          <div className="field">
+            <label className="field-label" htmlFor="posting-url">Original URL (optional)</label>
+            <input id="posting-url" className="input" type="url" value={postingUrl}
+              onChange={(e) => setPostingUrl(e.target.value)} />
+          </div>
+        </>}
+        <p className="muted">Generation also looks for relevant company contacts and prepares short outreach drafts. Published work emails are preferred; LinkedIn is the fallback.</p>
 
         {!apiKeySet && !fakeMode ? (
           <div className="alert alert-error">
-            No API key set — add ANTHROPIC_API_KEY to .env and restart, or{" "}
+            No API key set — add DEEPSEEK_API_KEY to .env and restart, or{" "}
             <Link to="/getting-started">use MCP mode</Link>. Submitting now will fail at
             generation.
           </div>
         ) : (
           <p className="muted">
-            Generated with your Anthropic API key (~$0.15–$3 each, by research depth). Prefer
+            Generated with your DeepSeek API key (estimated usage is tracked per application). Prefer
             your own Claude agent? <Link to="/getting-started">See MCP mode →</Link>
           </p>
         )}
       </div>
 
-      {urls.length > 0 && (
+      {entries.length > 0 && (
         <div className="card">
           <div className="card-title">
-            {urls.length} job{urls.length === 1 ? "" : "s"} to queue
+            {entries.length} job{entries.length === 1 ? "" : "s"} to queue
           </div>
-          {urls.map((url, i) => (
+          {entries.map((url, i) => (
             <div className="row" data-testid="job-row" key={i}>
               <span className="mono" style={{ flex: "2 1 16rem", overflowWrap: "anywhere" }}>
                 {url}

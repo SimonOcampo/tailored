@@ -7,7 +7,7 @@ be typed into directly. Two properties matter and are tested here:
    edit_mode off, and its markup must stay byte-identical to what it was
    before this feature existed (the golden files under tests/golden/).
 2. The paths are stable and template-independent. One harvest function in the
-   frontend reads every template, so all eight must emit the same path set for
+    frontend reads every template, so all nine must emit the same path set for
    the same resume.
 """
 from __future__ import annotations
@@ -181,7 +181,6 @@ EXPECTED_EDITABLE_PATHS = {
     "sections.1.groups.1.label",
     "sections.1.groups.1.items",
     "sections.2.title",
-    "sections.2.items.0.description",
     "sections.2.items.0.bullets.0",
     "sections.3.title",
     "sections.3.items.0.detail",
@@ -215,7 +214,8 @@ def test_empty_prose_still_renders_an_editable_target() -> None:
     resume.sections[3].items[0].detail = None
     html = render_resume_html(resume, "slate", edit_mode=True)
     paths = set(_attr_values(html, "data-edit-path"))
-    assert {"summary", "sections.2.items.0.description", "sections.3.items.0.detail"} <= paths
+    assert {"summary", "sections.3.items.0.detail"} <= paths
+    assert "sections.2.items.0.description" not in paths  # Omitted by the compact project layout.
     # and stays absent from the export, where an empty element would print as a gap
     assert '<p class="summary"' not in render_resume_html(resume, "slate")
 

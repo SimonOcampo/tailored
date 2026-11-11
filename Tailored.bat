@@ -163,8 +163,8 @@ set "KEY_ATTEMPTS=0"
 
 :menu
 echo.
-echo No Anthropic API key found yet.
-echo   [1] Add my Anthropic API key now (opens Notepad)
+echo No DeepSeek API key found yet.
+echo   [1] Add my DeepSeek API key now (opens Notepad)
 echo   [2] Try it in demo mode (no key needed, sample data)
 echo   [3] Exit
 set "MENU_CHOICE="
@@ -216,7 +216,7 @@ if not "%RC%"=="0" (
     echo.
     echo Quick troubleshooting:
     echo   - Try running: Tailored.bat --clean
-    echo   - Check that .env has a valid ANTHROPIC_API_KEY, or delete .env to use demo mode
+    echo   - Check that .env has a valid DEEPSEEK_API_KEY, or delete .env to use demo mode
     echo   - Try running as Administrator
     echo   - Check Python 3.11+ is installed: python --version
     echo.
@@ -228,5 +228,5 @@ rem ---------------------------------------------------------------------
 rem Subroutines
 rem ---------------------------------------------------------------------
 :check_key
-".venv\Scripts\python.exe" -c "import os, sys; from dotenv import load_dotenv; load_dotenv(); key = os.environ.get('ANTHROPIC_API_KEY', '').strip(); fake = os.environ.get('TAILORED_FAKE', ''); sys.exit(0 if (key or fake == '1') else 1)"
+".venv\Scripts\python.exe" -c "import os, sys; from dotenv import load_dotenv; load_dotenv(); key = os.environ.get('DEEPSEEK_API_KEY', '').strip(); fake = os.environ.get('TAILORED_FAKE', ''); sys.exit(0 if (key or fake == '1') else 1)"
 exit /b %errorlevel%

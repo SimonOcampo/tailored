@@ -30,7 +30,7 @@ from ..models import (
     get_resume,
     set_resume,
 )
-from ..schemas import ResumeDoc
+from ..schemas import ResumeDoc, OutreachPlan
 from ..services import pipeline, render
 from ..services.person_settings import settings_for
 from ..services.removal import delete_application_rows
@@ -44,6 +44,7 @@ PROCESSING_STATUSES = ("fetching", "researching", "tailoring", "rendering")
 DEPTHS = ("quick", "standard", "deep")
 EXPORT_KINDS = (
     "resume.pdf",
+    "resume.docx",
     "resume.html",
     "resume.txt",
     "cover_letter.pdf",
@@ -100,6 +101,7 @@ def application_detail(
             "resume": resume.model_dump() if resume is not None else None,
             "cover_letter_md": app_row.cover_letter_md,
             "tailoring_notes": app_row.tailoring_notes,
+            "outreach": OutreachPlan.model_validate_json(app_row.outreach_json).model_dump() if app_row.outreach_json else None,
             "research": get_findings(brief).model_dump() if brief is not None else None,
             "parsed": parsed.model_dump() if parsed is not None else None,
             "raw_text_present": bool(job.raw_text),
@@ -193,7 +195,8 @@ def _events_for(session: Session, application_id: int) -> list[ApplicationEvent]
 
 
 class BatchJobIn(BaseModel):
-    url: str
+    url: str = ""
+    posting_text: Optional[str] = None
     depth: Optional[str] = None
     template: Optional[str] = None
 
@@ -266,7 +269,7 @@ def create_batch(
     )
 
     # Validate everything before creating anything (all-or-nothing).
-    resolved: list[tuple[str, str, str]] = []
+    resolved: list[tuple[str, str, str, str | None]] = []
     for j in body.jobs:
         depth = j.depth or fallback_depth
         template = j.template or fallback_template
@@ -280,11 +283,18 @@ def create_batch(
                 status_code=422,
                 detail=f"invalid template {template!r}; must be one of {list(TEMPLATES)}",
             )
-        resolved.append((j.url, depth, template))
+        posting_text = (j.posting_text or "").strip() or None
+        url = j.url.strip()
+        if not url and not posting_text:
+            raise HTTPException(status_code=422, detail="Supply a job URL or pasted job description")
+        if posting_text and len(posting_text) > 200_000:
+            raise HTTPException(status_code=422, detail="Job description exceeds 200,000 characters")
+        resolved.append((url or "Pasted job description", depth, template, posting_text))
 
     results: list[dict[str, Any]] = []
-    for url, depth, template in resolved:
-        job = Job(url=url, depth=depth)
+    for url, depth, template, posting_text in resolved:
+        job = Job(url=url, depth=depth, raw_text=posting_text,
+                  fetch_status="pasted" if posting_text else "pending")
         session.add(job)
         session.commit()
         session.refresh(job)
@@ -505,6 +515,12 @@ def set_template(
     user_settings = settings_for(settings.data_dir, profile)
     # Render before committing anything: a row claiming a template its exports
     # were never rendered in would serve the old PDF under the new label.
+    resume_now.contact.authorization_note = get_contact(profile).authorization_note
+    try:
+        resume_now = render.prepare_resume(resume_now, body.template,
+            user_settings.get("page_size", "Letter"), one_page=profile.one_page_resume)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     export_dir = render.export_application(
         app_row.id,
         resume_now,
@@ -515,6 +531,7 @@ def set_template(
         page_size=user_settings.get("page_size", "Letter"),
     )
     app_row.template = body.template
+    set_resume(app_row, resume_now)
     app_row.export_dir = str(export_dir)
     app_row.updated_at = _utcnow()
     session.add(app_row)
@@ -608,8 +625,6 @@ def update_content(
             app_row.cover_letter_md = cleaned_cover
     app_row.updated_at = _utcnow()
     session.add(app_row)
-    session.commit()
-    session.refresh(app_row)
 
     resume_now = get_resume(app_row)
     if resume_now is not None:
@@ -619,6 +634,12 @@ def update_content(
         settings = request.app.state.settings
         # The owner's page size, never another person's (spec 5.2).
         user_settings = settings_for(settings.data_dir, profile)
+        resume_now.contact.authorization_note = get_contact(profile).authorization_note
+        try:
+            resume_now = render.prepare_resume(resume_now, app_row.template,
+                user_settings.get("page_size", "Letter"), one_page=profile.one_page_resume)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         export_dir = render.export_application(
             app_row.id,
             resume_now,
@@ -629,9 +650,11 @@ def update_content(
             page_size=user_settings.get("page_size", "Letter"),
         )
         app_row.export_dir = str(export_dir)
-        session.add(app_row)
-        session.commit()
-        session.refresh(app_row)
+        set_resume(app_row, resume_now)
+
+    session.add(app_row)
+    session.commit()
+    session.refresh(app_row)
 
     detail = application_detail(session, app_row, job)
     # Reported, never enforced. A hand edit is the user's own writing, so the

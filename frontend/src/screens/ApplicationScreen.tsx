@@ -18,6 +18,7 @@ import {
 } from "../api";
 import { harvestResume, removalTarget } from "../inlineEdit";
 import { usePerson } from "../person";
+import OutreachPanel from "../OutreachPanel";
 import { STATUS_LABELS, TERMINAL_STATUSES } from "../statuses";
 import type {
   ApplicationDetail,
@@ -32,6 +33,7 @@ import type {
 
 const EXPORT_KINDS: ExportKind[] = [
   "resume.pdf",
+  "resume.docx",
   "resume.html",
   "resume.txt",
   "cover_letter.pdf",
@@ -47,7 +49,7 @@ const STAGES: Stage[] = [
   "interview", "offer", "rejected", "withdrawn",
 ];
 
-type Tab = "resume" | "cover" | "research" | "exports";
+type Tab = "resume" | "cover" | "research" | "outreach" | "exports";
 
 function StyleReport({
   violations,
@@ -650,7 +652,7 @@ export default function ApplicationScreen() {
       <p>
         <span className={`badge badge-${detail.status}`}>{STATUS_LABELS[detail.status]}</span>{" "}
         <span className="muted">
-          v{detail.version} · ${detail.cost_usd.toFixed(4)} · {detail.depth} · {detail.template}
+          v{detail.version} · est. ${detail.cost_usd.toFixed(4)} · {detail.depth} · {detail.template}
         </span>
         {working && <span className="spinner" style={{ marginLeft: "0.5rem" }} />}
       </p>
@@ -788,6 +790,8 @@ export default function ApplicationScreen() {
             >
               Research
             </button>
+            <button className={tab === "outreach" ? "tab active" : "tab"}
+              onClick={() => setTab("outreach")}>Outreach</button>
             <button
               className={tab === "exports" ? "tab active" : "tab"}
               onClick={() => setTab("exports")}
@@ -834,10 +838,9 @@ export default function ApplicationScreen() {
                     ref={frameRef}
                     title="Resume preview"
                     className="preview-frame"
-                    /* allow-same-origin, and deliberately not allow-scripts:
-                       the parent needs to read this document, nothing in it
-                       needs to run. */
-                    sandbox="allow-same-origin"
+                    /* The parent reads the frame; links open separate tabs.
+                       Scripts remain disabled inside the preview. */
+                    sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
                   />
                 </div>
               </>
@@ -848,7 +851,7 @@ export default function ApplicationScreen() {
                   src={previewUrl(appId)}
                   title="Resume preview"
                   className="preview-frame"
-                  sandbox=""
+                  sandbox="allow-popups allow-popups-to-escape-sandbox"
                 />
               </div>
             )}
@@ -1001,6 +1004,8 @@ export default function ApplicationScreen() {
               )}
             </div>
           )}
+
+          {tab === "outreach" && <OutreachPanel plan={detail.outreach} />}
 
           {tab === "exports" && (
             <div className="card">

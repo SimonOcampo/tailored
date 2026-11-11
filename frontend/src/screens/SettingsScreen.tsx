@@ -130,7 +130,7 @@ export default function SettingsScreen() {
         </p>
 
         <div className="card">
-          <div className="card-title">Anthropic API key</div>
+          <div className="card-title">DeepSeek API key</div>
           <p>
             {settings.api_key_set ? (
               <span className="pill pill-ok">API key set</span>
@@ -139,7 +139,7 @@ export default function SettingsScreen() {
             )}
           </p>
           <p className="muted">
-            The key is read from the ANTHROPIC_API_KEY variable in the .env file next to run.py.
+            The key is read from the DEEPSEEK_API_KEY variable in the .env file next to run.py.
             Add or change it there and restart the app — it is never stored in the database.
           </p>
           {settings.fake_mode ? (
@@ -160,7 +160,7 @@ export default function SettingsScreen() {
           <div className="field">
             <label className="field-label">Web app (this browser)</label>
             <p className="muted">
-              Applications you create on the Add Jobs page are generated with the Anthropic API,
+              Applications you create on the Add Jobs page are generated with the DeepSeek API,
               billed to your API key.
             </p>
             <p>
@@ -173,7 +173,7 @@ export default function SettingsScreen() {
             </p>
             {!settings.api_key_set && (
               <p className="muted">
-                Add ANTHROPIC_API_KEY to the .env file and restart to generate from the web app.
+                Add DEEPSEEK_API_KEY to the .env file and restart to generate from the web app.
               </p>
             )}
             {settings.fake_mode && (

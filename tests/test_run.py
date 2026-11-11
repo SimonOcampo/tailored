@@ -22,7 +22,7 @@ def test_port_in_use_true_while_bound_false_after_close():
 
 def test_main_opens_browser_and_skips_server_when_already_running(monkeypatch):
     fake_settings = config_module.Settings(
-        anthropic_api_key=None,
+        deepseek_api_key=None,
         data_dir="unused",
         fake_mode=True,
         host="127.0.0.1",

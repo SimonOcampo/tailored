@@ -16,6 +16,7 @@ class Contact(BaseModel):
     phone: Optional[str] = None
     location: Optional[str] = None
     links: list[LinkItem] = Field(default_factory=list)
+    authorization_note: str = ""
 
 
 # Spellings of "still in this role". None is the canonical one: every template
@@ -107,6 +108,57 @@ class ResearchFindings(BaseModel):
     tech_stack_signals: list[str] = Field(default_factory=list)
     culture_language: list[str] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)
+
+
+class ContactLead(BaseModel):
+    name: str = Field(min_length=1, max_length=150)
+    company: str = Field(min_length=1, max_length=200)
+    role: str = Field(min_length=1, max_length=200)
+    relevance: str = Field(min_length=1, max_length=500)
+    source_url: str
+    evidence_quote: str = Field(min_length=12, max_length=1200)
+    email: Optional[str] = None
+    email_source_url: Optional[str] = None
+    email_evidence_quote: Optional[str] = None
+    linkedin_url: Optional[str] = None
+
+
+class ContactResearch(BaseModel):
+    contacts: list[ContactLead] = Field(default_factory=list, max_length=3)
+    notes: str = ""
+
+
+class OutreachDraft(BaseModel):
+    contact_index: int = Field(ge=0, le=2)
+    email_subject: str = Field(min_length=1, max_length=120)
+    email_body: str = Field(min_length=1, max_length=900)
+    linkedin_message: str = Field(min_length=1, max_length=280)
+
+    @field_validator("email_body")
+    @classmethod
+    def short_email(cls, value: str) -> str:
+        if len(value.split()) > 100:
+            raise ValueError("Outreach emails must be at most 100 words")
+        return value
+
+
+class OutreachDrafts(BaseModel):
+    drafts: list[OutreachDraft] = Field(default_factory=list, max_length=3)
+
+
+class OutreachContact(ContactLead):
+    email_subject: str = Field(min_length=1, max_length=120)
+    email_body: str = Field(min_length=1, max_length=900)
+    linkedin_message: str = Field(min_length=1, max_length=280)
+
+    _short_email = field_validator("email_body")(OutreachDraft.short_email.__func__)
+
+
+class OutreachPlan(BaseModel):
+    status: Literal["ready", "no_contacts", "unavailable"]
+    notes: str = ""
+    checked_at: str = ""
+    contacts: list[OutreachContact] = Field(default_factory=list, max_length=3)
 
 
 # --- Resume document (renderer contract) ---

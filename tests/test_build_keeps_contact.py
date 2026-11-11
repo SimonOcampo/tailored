@@ -2,7 +2,7 @@
 Build over an old resume cannot move their email (or their Inbox link)."""
 from __future__ import annotations
 
-from backend.app.api.profiles import _merge_contact
+from backend.app.services.intake import merge_contact as _merge_contact
 from backend.app.schemas import Contact, LinkItem, MasterProfile, MPExperience, UsageInfo
 from backend.app.services import intake
 
@@ -20,7 +20,7 @@ BUILT = MasterProfile(
 
 
 def _fake_build(monkeypatch, found=FOUND):
-    def fake(docs, claude):
+    def fake(docs, deepseek):
         return BUILT, found, UsageInfo()
 
     monkeypatch.setattr(intake, "build_master_profile", fake)
@@ -45,6 +45,7 @@ def test_merge_keeps_every_non_empty_field():
         phone="(206) 555-0142",
         location="Seattle, WA",
         links=[LinkItem(label="Site", url="https://ada.example.com")],
+        authorization_note="Candidate supplied authorization statement.",
     )
 
     assert _merge_contact(existing, FOUND) == existing
@@ -90,12 +91,12 @@ def test_build_keeps_the_existing_contact(client, monkeypatch):
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["contact"] == contact
+    assert body["contact"] == {**contact, "authorization_note": ""}
     assert body["name"] == "Ada Lovelace"
     assert body["inbox_url"] == "https://mail.google.com/mail/?authuser=ada@gmail.com"
     # Build still does its job: the master profile is the one intake built.
     assert body["master_profile"]["experiences"][0]["company"] == "Analytical Engines"
-    assert client.get(f"/api/profiles/{pid}").json()["contact"] == contact
+    assert client.get(f"/api/profiles/{pid}").json()["contact"] == {**contact, "authorization_note": ""}
 
 
 def test_build_fills_empty_contact_fields(client, monkeypatch):
@@ -105,6 +106,7 @@ def test_build_fills_empty_contact_fields(client, monkeypatch):
     contact = client.post(f"/api/profiles/{pid}/build").json()["contact"]
 
     assert contact == {
+        "authorization_note": "",
         "name": "Ada",
         "email": "old.address@outlook.com",
         "phone": "(206) 555-0100",

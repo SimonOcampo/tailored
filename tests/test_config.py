@@ -9,7 +9,7 @@ from backend.app.config import (
 )
 
 ENV_VARS = [
-    "ANTHROPIC_API_KEY",
+    "DEEPSEEK_API_KEY",
     "TAILORED_DATA_DIR",
     "TAILORED_FAKE",
     "TAILORED_HOST",
@@ -18,13 +18,13 @@ ENV_VARS = [
 
 
 def test_settings_reads_env(monkeypatch, tmp_path):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-123")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test-123")
     monkeypatch.setenv("TAILORED_DATA_DIR", str(tmp_path / "custom"))
     monkeypatch.setenv("TAILORED_FAKE", "1")
     monkeypatch.setenv("TAILORED_HOST", "0.0.0.0")
     monkeypatch.setenv("TAILORED_PORT", "9000")
     s = Settings()
-    assert s.anthropic_api_key == "sk-test-123"
+    assert s.deepseek_api_key == "sk-test-123"
     assert s.data_dir == tmp_path / "custom"
     assert s.fake_mode is True
     assert s.host == "0.0.0.0"
@@ -35,11 +35,17 @@ def test_settings_defaults(monkeypatch):
     for var in ENV_VARS:
         monkeypatch.delenv(var, raising=False)
     s = Settings()
-    assert s.anthropic_api_key is None
+    assert s.deepseek_api_key is None
     assert s.data_dir == PROJECT_ROOT / "data"
     assert s.fake_mode is False
     assert s.host == "127.0.0.1"
     assert s.port == 8547
+
+
+def test_an_old_provider_key_is_never_used_as_a_deepseek_key(monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "old-provider-key")
+    assert Settings().deepseek_api_key is None
 
 
 def test_settings_kwargs_override_env(monkeypatch, tmp_path):
@@ -52,9 +58,9 @@ def test_settings_kwargs_override_env(monkeypatch, tmp_path):
 
 
 def test_settings_explicit_none_api_key_beats_env(monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-should-be-ignored")
-    s = Settings(anthropic_api_key=None)
-    assert s.anthropic_api_key is None
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-should-be-ignored")
+    s = Settings(deepseek_api_key=None)
+    assert s.deepseek_api_key is None
 
 
 def test_settings_empty_host_defaults(monkeypatch):
